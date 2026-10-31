@@ -7,4 +7,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/ScreenSorter.Tests/ScreenSorter.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/ScreenSorter.Probe/ScreenSorter.Probe.csproj" />
+  </Folder>
 </Solution>

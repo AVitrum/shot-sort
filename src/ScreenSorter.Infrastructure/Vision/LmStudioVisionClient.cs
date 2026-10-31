@@ -80,7 +80,7 @@ public sealed class LmStudioVisionClient(
         {
             ["model"] = _options.Model,
             ["temperature"] = 0,
-            ["max_tokens"] = 200,
+            ["max_tokens"] = _options.MaxTokens,
             ["stream"] = false,
             ["ttl"] = _options.TtlSeconds,
             ["messages"] = new JsonArray(
@@ -116,9 +116,14 @@ public sealed class LmStudioVisionClient(
     {
         try
         {
-            var content = JsonNode.Parse(body)?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+            var choice = JsonNode.Parse(body)?["choices"]?[0];
+            var content = choice?["message"]?["content"]?.GetValue<string>();
             if (string.IsNullOrWhiteSpace(content))
+            {
+                // finish_reason "length" means reasoning used up LmStudio:MaxTokens before the answer.
+                logger.LogWarning("Empty vision answer (finish_reason {Reason})", choice?["finish_reason"]?.ToString() ?? "?");
                 return null;
+            }
 
             var answer = JsonNode.Parse(StripCodeFence(content));
             var category = answer?["category"]?.GetValue<string>();

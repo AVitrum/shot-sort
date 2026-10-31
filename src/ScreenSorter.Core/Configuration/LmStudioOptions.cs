@@ -18,6 +18,12 @@ public sealed class LmStudioOptions
     /// <summary>JPEG quality (1–100) of the image sent to the model.</summary>
     public int JpegQuality { get; set; } = 90;
 
+    /// <summary>
+    /// Completion token limit. Reasoning models (Gemma 4) spend tokens on <c>reasoning_content</c> before the
+    /// JSON answer, so this must cover both; too low yields an empty answer.
+    /// </summary>
+    public int MaxTokens { get; set; } = 1024;
+
     /// <summary>Per-request timeout. The first request may include loading the model.</summary>
     public int TimeoutSeconds { get; set; } = 180;
 
