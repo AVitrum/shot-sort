@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ScreenSorter.App/ScreenSorter.App.csproj" />
+    <Project Path="src/ScreenSorter.Core/ScreenSorter.Core.csproj" />
+    <Project Path="src/ScreenSorter.Infrastructure/ScreenSorter.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ScreenSorter.Tests/ScreenSorter.Tests.csproj" />
+  </Folder>
+</Solution>

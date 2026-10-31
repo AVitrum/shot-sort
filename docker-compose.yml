@@ -1,0 +1,16 @@
+# Qdrant vector store for confirmed screenshot examples (milestone 4).
+# Start: docker compose up -d   Check: curl http://localhost:6333/readyz
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    container_name: screensorter-qdrant
+    restart: unless-stopped
+    ports:
+      # Bound to loopback only; nothing outside this machine needs it.
+      - "127.0.0.1:6333:6333"   # HTTP/REST
+      - "127.0.0.1:6334:6334"   # gRPC
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+volumes:
+  qdrant_storage:
