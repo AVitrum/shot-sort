@@ -39,7 +39,7 @@ public sealed class SortPipelineTests : IDisposable
         _log = new SqliteDecisionLog(paths);
         _pipeline = new SortPipeline(store, _focus,
             new RulesEngine(rules, new GameDetector(rules, new NoTitles())), new WicImageInspector(), _vision,
-            new VisionMapper(Opt(LmStudio()), rules, thresholds, paths), _log, paths, thresholds, TimeProvider.System,
+            new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, TimeProvider.System,
             NullLogger<SortPipeline>.Instance);
     }
 

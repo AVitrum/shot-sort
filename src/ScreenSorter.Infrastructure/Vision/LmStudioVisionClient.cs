@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ScreenSorter.Core.Configuration;
 using ScreenSorter.Core.Models;
+using ScreenSorter.Core.Rules;
 using ScreenSorter.Core.Vision;
 
 namespace ScreenSorter.Infrastructure.Vision;
@@ -19,6 +20,7 @@ namespace ScreenSorter.Infrastructure.Vision;
 public sealed class LmStudioVisionClient(
     HttpClient http,
     IImageInspector images,
+    IGameCatalog games,
     IOptions<LmStudioOptions> options,
     ILogger<LmStudioVisionClient> logger) : IVisionClassifier
 {
@@ -31,7 +33,7 @@ public sealed class LmStudioVisionClient(
     public async Task<VisionResult?> ClassifyAsync(string imagePath, FocusSnapshot? hint, CancellationToken ct)
     {
         var jpeg = images.ToJpeg(imagePath, _options.MaxImageSide, _options.JpegQuality);
-        var request = BuildRequest(Convert.ToBase64String(jpeg), hint);
+        var request = BuildRequest(Convert.ToBase64String(jpeg), hint, games.GetTitles());
 
         string body;
         try
@@ -58,17 +60,25 @@ public sealed class LmStudioVisionClient(
     /// <summary>Builds the chat-completions request body.</summary>
     /// <param name="imageBase64">Base64 JPEG.</param>
     /// <param name="hint">Focused window, if known.</param>
+    /// <param name="knownGames">
+    /// Valid game titles. When non-empty, <c>game_title</c> is restricted to these or "" (D-017);
+    /// when empty it is free text.
+    /// </param>
     /// <returns>The JSON body.</returns>
-    internal JsonObject BuildRequest(string imageBase64, FocusSnapshot? hint)
+    internal JsonObject BuildRequest(string imageBase64, FocusSnapshot? hint, IReadOnlyList<string> knownGames)
     {
         var categories = _options.Categories.Keys.ToList();
+        var gameTitle = new JsonObject { ["type"] = "string" };
+        if (knownGames.Count > 0)
+            gameTitle["enum"] = new JsonArray(knownGames.Append("").Select(t => (JsonNode)t).ToArray());
+
         var schema = new JsonObject
         {
             ["type"] = "object",
             ["properties"] = new JsonObject
             {
                 ["category"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(categories.Select(c => (JsonNode)c).ToArray()) },
-                ["game_title"] = new JsonObject { ["type"] = "string" },
+                ["game_title"] = gameTitle,
                 ["app_name"] = new JsonObject { ["type"] = "string" },
                 ["confidence"] = new JsonObject { ["type"] = "number", ["minimum"] = 0, ["maximum"] = 1 },
             },
@@ -89,7 +99,7 @@ public sealed class LmStudioVisionClient(
                 {
                     ["role"] = "user",
                     ["content"] = new JsonArray(
-                        new JsonObject { ["type"] = "text", ["text"] = UserPrompt(categories, hint) },
+                        new JsonObject { ["type"] = "text", ["text"] = UserPrompt(categories, hint, knownGames) },
                         new JsonObject
                         {
                             ["type"] = "image_url",
@@ -145,11 +155,15 @@ public sealed class LmStudioVisionClient(
 
     private Uri Endpoint() => new(_options.BaseUrl.TrimEnd('/') + "/chat/completions");
 
-    private static string UserPrompt(IReadOnlyList<string> categories, FocusSnapshot? hint)
+    private static string UserPrompt(IReadOnlyList<string> categories, FocusSnapshot? hint, IReadOnlyList<string> knownGames)
     {
+        var gameRule = knownGames.Count > 0
+            ? "Set game_title to the matching game from this list of the user's games, or an empty string if the game is " +
+              "not in the list or you are not sure which one it is: " + string.Join("; ", knownGames) + ".\n"
+            : "Set game_title to the game's official title.\n";
         var text =
             "Classify this screenshot into exactly one category: " + string.Join(", ", categories) + ".\n" +
-            "- Game: a video game (gameplay, menus, launchers in-game). Set game_title to the game's official title.\n" +
+            "- Game: a video game (gameplay, menus, launchers in-game). " + gameRule +
             "- Chat: a messaging app such as Discord, Telegram, WhatsApp or Slack. Set app_name to the app.\n" +
             "- Calls: a video or voice call (Zoom, Google Meet, Teams).\n" +
             "- Code: code editor, IDE or terminal. Streaming: YouTube, Twitch, Netflix or a video player.\n" +

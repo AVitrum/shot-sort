@@ -33,6 +33,7 @@ var model = builder.Configuration[$"{LmStudioOptions.Section}:Model"];
 var extensions = builder.Configuration.GetSection($"{IntakeOptions.Section}:Extensions").Get<string[]>() ?? [".png"];
 
 Console.WriteLine($"Model: {model}");
+Console.WriteLine($"Known games: {string.Join("; ", host.Services.GetRequiredService<ScreenSorter.Core.Rules.IGameCatalog>().GetTitles())}");
 var total = Stopwatch.StartNew();
 var count = 0;
 foreach (var file in Directory.EnumerateFiles(args[0]).Where(f => extensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)).Order())

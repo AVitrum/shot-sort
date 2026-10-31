@@ -14,9 +14,9 @@ namespace ScreenSorter.Tests;
 
 public class VisionMapperTests
 {
-    private static VisionMapper Mapper() =>
+    private static VisionMapper Mapper(params string[] knownGames) =>
         new(Opt(SortPipelineTests.LmStudio()), Opt(DefaultRules()), Opt(new ThresholdsOptions { VisionConfidence = 0.7 }),
-            Opt(new PathsOptions { ReviewFolder = "_Review" }));
+            Opt(new PathsOptions { ReviewFolder = "_Review" }), new FixedCatalog(knownGames));
 
     [Fact]
     public void Map_Game_UsesTitleAndAlias()
@@ -25,6 +25,14 @@ public class VisionMapperTests
 
         Assert.Equal(("Games", "Counter-Strike 2", DecisionStage.Vision), (c.Category, c.SubFolder, c.Stage));
     }
+
+    [Fact]
+    public void Map_Game_UsesCatalogSpelling() =>
+        Assert.Equal("Arknights Endfield", Mapper("Arknights Endfield", "Deadlock").Map(new VisionResult("Game", "Arknights: Endfield", null, 1)).SubFolder);
+
+    [Fact]
+    public void Map_Game_NotInCatalog_GoesToReview() =>
+        Assert.Equal("_Review", Mapper("Deadlock").Map(new VisionResult("Game", "Mobile Legends: Bang Bang", null, 1)).Category);
 
     [Fact]
     public void Map_Chat_UsesAppName() =>
@@ -54,7 +62,7 @@ public class LmStudioVisionClientTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     private static LmStudioVisionClient Client(HttpMessageHandler handler) =>
-        new(new HttpClient(handler), new WicImageInspector(),
+        new(new HttpClient(handler), new WicImageInspector(), new FixedCatalog("Deadlock"),
             Opt(new LmStudioOptions
             {
                 BaseUrl = "http://localhost:1234/v1/",
@@ -68,7 +76,7 @@ public class LmStudioVisionClientTests : IDisposable
     [Fact]
     public void BuildRequest_HasImageSchemaTtlAndHint()
     {
-        var body = Client(new StubHandler(HttpStatusCode.OK, "")).BuildRequest("QUJD", Focus("Hades.exe", "Hades"));
+        var body = Client(new StubHandler(HttpStatusCode.OK, "")).BuildRequest("QUJD", Focus("Hades.exe", "Hades"), []);
 
         Assert.Equal("google/gemma-4-12b-qat", body["model"]?.GetValue<string>());
         Assert.Equal(300, body["ttl"]?.GetValue<int>());
@@ -80,6 +88,22 @@ public class LmStudioVisionClientTests : IDisposable
         Assert.Equal("data:image/jpeg;base64,QUJD", content[1]!["image_url"]!["url"]!.GetValue<string>());
         Assert.Contains("Hades.exe", content[0]!["text"]!.GetValue<string>());
     }
+
+    [Fact]
+    public void BuildRequest_KnownGames_RestrictTitleAndAppearInPrompt()
+    {
+        var body = Client(new StubHandler(HttpStatusCode.OK, "")).BuildRequest("QUJD", null, ["Deadlock", "Dota 2"]);
+
+        var titles = body["response_format"]!["json_schema"]!["schema"]!["properties"]!["game_title"]!["enum"]!.AsArray()
+            .Select(n => n!.GetValue<string>()).ToList();
+        Assert.Equal(["Deadlock", "Dota 2", ""], titles);
+        Assert.Contains("Deadlock; Dota 2", body["messages"]![1]!["content"]![0]!["text"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void BuildRequest_NoKnownGames_FreeTitle() =>
+        Assert.Null(Client(new StubHandler(HttpStatusCode.OK, "")).BuildRequest("QUJD", null, [])
+            ["response_format"]!["json_schema"]!["schema"]!["properties"]!["game_title"]!["enum"]);
 
     [Theory]
     [InlineData("{\"category\":\"Game\",\"game_title\":\"Hades\",\"app_name\":\"\",\"confidence\":0.93}", "Game", "Hades", null, 0.93)]

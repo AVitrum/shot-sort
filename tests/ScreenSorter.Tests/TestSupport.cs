@@ -79,6 +79,11 @@ internal sealed class TempFolder : IDisposable
     }
 }
 
+internal sealed class FixedCatalog(params string[] titles) : ScreenSorter.Core.Rules.IGameCatalog
+{
+    public IReadOnlyList<string> GetTitles() => titles;
+}
+
 internal sealed class FakeTime(DateTimeOffset now) : TimeProvider
 {
     public DateTimeOffset Now { get; set; } = now;

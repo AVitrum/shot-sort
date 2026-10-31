@@ -38,12 +38,14 @@ public static class ServiceCollectionExtensions
         services.Configure<LmStudioOptions>(configuration.GetSection(LmStudioOptions.Section));
         services.Configure<ThresholdsOptions>(configuration.GetSection(ThresholdsOptions.Section));
         services.Configure<IdleOptions>(configuration.GetSection(IdleOptions.Section));
+        services.Configure<GameCatalogOptions>(configuration.GetSection(GameCatalogOptions.Section));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SortActivity>();
         services.AddSingleton<FocusHistory>();
         services.AddSingleton<IFocusHistory>(sp => sp.GetRequiredService<FocusHistory>());
         services.AddSingleton<IGameTitleProvider, SteamGameTitleProvider>();
+        services.AddSingleton<IGameCatalog, GameCatalog>();
         services.AddSingleton<GameDetector>();
         services.AddSingleton<RulesEngine>();
         services.AddSingleton<IScreenshotStore, FileSystemScreenshotStore>();
@@ -57,6 +59,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IVisionClassifier>(sp => new LmStudioVisionClient(
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
             sp.GetRequiredService<IImageInspector>(),
+            sp.GetRequiredService<IGameCatalog>(),
             sp.GetRequiredService<IOptions<LmStudioOptions>>(),
             sp.GetRequiredService<ILogger<LmStudioVisionClient>>()));
         services.AddSingleton<SortPipeline>();

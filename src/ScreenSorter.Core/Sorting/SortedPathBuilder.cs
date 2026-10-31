@@ -70,6 +70,12 @@ public static class SortedPathBuilder
         return ReservedDeviceNames.Contains(result) ? result + "_" : result;
     }
 
-    private static string MatchKey(string name) =>
+    /// <summary>
+    /// Comparison key for names that differ only in case, spacing or punctuation
+    /// (<c>ELDEN RING™</c>, <c>Elden Ring</c> → <c>eldenring</c>).
+    /// </summary>
+    /// <param name="name">A folder name or title.</param>
+    /// <returns>Lower-case letters and digits only.</returns>
+    public static string MatchKey(string name) =>
         new(name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 }
