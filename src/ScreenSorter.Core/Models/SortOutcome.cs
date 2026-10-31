@@ -17,13 +17,17 @@ public enum SortOutcomeKind
 
     /// <summary>Not processed (vanished, locked too long, or failed). Details are logged.</summary>
     Skipped,
+
+    /// <summary>No rule matched; left in place and handed to the vision queue.</summary>
+    Queued,
 }
 
 /// <summary>Result of processing one file.</summary>
 /// <param name="Kind">What happened.</param>
 /// <param name="SourcePath">The input path.</param>
 /// <param name="TargetPath">The new path for <see cref="SortOutcomeKind.Sorted"/> and <see cref="SortOutcomeKind.Review"/>; otherwise <see langword="null"/>.</param>
-public sealed record SortOutcome(SortOutcomeKind Kind, string SourcePath, string? TargetPath = null);
+/// <param name="Focus">The focus snapshot found for the file, if any; carried into the vision queue.</param>
+public sealed record SortOutcome(SortOutcomeKind Kind, string SourcePath, string? TargetPath = null, FocusSnapshot? Focus = null);
 
 /// <summary>Counts for one drained batch, used for the tray notification.</summary>
 /// <param name="Sorted">Files moved into category folders.</param>

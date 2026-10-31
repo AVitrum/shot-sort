@@ -17,4 +17,7 @@ public enum DecisionStage
 
     /// <summary>The user moved the file to another category.</summary>
     UserCorrection,
+
+    /// <summary>The image is black or near-uniform (failed fullscreen capture); sent to review.</summary>
+    ImageCheck,
 }

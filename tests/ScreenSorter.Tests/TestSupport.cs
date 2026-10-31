@@ -40,10 +40,35 @@ internal sealed class TempFolder : IDisposable
 
     public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ScreenSorterTests", Guid.NewGuid().ToString("N"));
 
-    public string File(string name, int bytes = 64)
+    /// <summary>Writes a PNG with random gray noise (not blank); different seeds give different content.</summary>
+    public string File(string name, int seed = 1, int width = 64, int height = 48)
+    {
+        var pixels = new byte[width * height];
+        new Random(seed).NextBytes(pixels);
+        return Png(name, width, height, pixels);
+    }
+
+    /// <summary>Writes a single-color PNG, e.g. a black failed fullscreen capture.</summary>
+    public string Solid(string name, byte value, int width = 64, int height = 48) =>
+        Png(name, width, height, Enumerable.Repeat(value, width * height).ToArray());
+
+    /// <summary>Writes arbitrary bytes, e.g. a corrupt image.</summary>
+    public string Raw(string name, byte[] bytes)
     {
         var path = System.IO.Path.Combine(Path, name);
-        System.IO.File.WriteAllBytes(path, Enumerable.Range(0, bytes).Select(i => (byte)i).ToArray());
+        System.IO.File.WriteAllBytes(path, bytes);
+        return path;
+    }
+
+    private string Png(string name, int width, int height, byte[] pixels)
+    {
+        var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(width, height, 96, 96,
+            System.Windows.Media.PixelFormats.Gray8, null, pixels, width);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        var path = System.IO.Path.Combine(Path, name);
+        using (var stream = System.IO.File.Create(path))
+            encoder.Save(stream);
         return path;
     }
 

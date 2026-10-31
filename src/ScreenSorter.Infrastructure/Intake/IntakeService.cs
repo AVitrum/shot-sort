@@ -5,12 +5,14 @@ using Microsoft.Extensions.Options;
 using ScreenSorter.Core.Configuration;
 using ScreenSorter.Core.Models;
 using ScreenSorter.Core.Sorting;
+using ScreenSorter.Core.Vision;
 
 namespace ScreenSorter.Infrastructure.Intake;
 
 /// <summary>
 /// Watches the top level of each watch folder, queues new screenshots and runs them through
-/// <see cref="SortPipeline"/> one at a time. A periodic rescan catches events the watcher dropped.
+/// <see cref="SortPipeline.ProcessAsync"/> one at a time; files no rule matched go to the
+/// <see cref="VisionQueue"/>. A periodic rescan catches events the watcher dropped.
 /// </summary>
 /// <remarks>
 /// Only the top level is watched (<c>IncludeSubdirectories = false</c>) because the category folders
@@ -20,6 +22,7 @@ namespace ScreenSorter.Infrastructure.Intake;
 public sealed class IntakeService(
     SortPipeline pipeline,
     SortActivity activity,
+    VisionQueue visionQueue,
     IOptions<PathsOptions> paths,
     IOptions<IntakeOptions> intake,
     ILogger<IntakeService> logger) : BackgroundService
@@ -38,6 +41,7 @@ public sealed class IntakeService(
             StartWatcher(folder);
 
         activity.SortNowRequested += OnSortNow;
+        visionQueue.ItemCompleted += OnVisionCompleted;
         try
         {
             Rescan(folders);
@@ -51,11 +55,18 @@ public sealed class IntakeService(
         finally
         {
             activity.SortNowRequested -= OnSortNow;
+            visionQueue.ItemCompleted -= OnVisionCompleted;
             foreach (var w in _watchers)
                 w.Dispose();
         }
 
         void OnSortNow(object? sender, EventArgs e) => Rescan(folders);
+    }
+
+    private void OnVisionCompleted(object? sender, VisionWorkItem item)
+    {
+        lock (_gate)
+            _known.Remove(item.Path);
     }
 
     private void StartWatcher(string folder)
@@ -128,11 +139,13 @@ public sealed class IntakeService(
                 {
                     case SortOutcomeKind.Sorted: sorted++; break;
                     case SortOutcomeKind.Review: review++; break;
+                    case SortOutcomeKind.Queued: visionQueue.Enqueue(new VisionWorkItem(path, outcome.Focus)); break;
                 }
 
-                // Deferred files stay known so rescans skip them; anything else may come back
-                // (a file the user drops into the top level again is a new screenshot).
-                if (outcome.Kind != SortOutcomeKind.Deferred)
+                // Deferred and queued files stay known so rescans skip them (queued ones are released by
+                // OnVisionCompleted); anything else may come back (a file dropped into the top level again
+                // is a new screenshot).
+                if (outcome.Kind is not (SortOutcomeKind.Deferred or SortOutcomeKind.Queued))
                 {
                     lock (_gate)
                         _known.Remove(path);

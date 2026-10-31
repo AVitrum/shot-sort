@@ -4,18 +4,21 @@ using ScreenSorter.Core.Focus;
 using ScreenSorter.Core.Models;
 using ScreenSorter.Core.Rules;
 using ScreenSorter.Core.Sorting;
+using ScreenSorter.Core.Vision;
 using ScreenSorter.Infrastructure.Files;
+using ScreenSorter.Infrastructure.Imaging;
 using ScreenSorter.Infrastructure.Storage;
 using static ScreenSorter.Tests.TestSupport;
 
 namespace ScreenSorter.Tests;
 
-/// <summary>End-to-end pipeline on a temp folder with the real file store and SQLite log.</summary>
+/// <summary>End-to-end pipeline on a temp folder with the real file store, WIC imaging and SQLite log.</summary>
 public sealed class SortPipelineTests : IDisposable
 {
     private readonly TempFolder _temp = new();
     private readonly FocusHistory _focus;
     private readonly SqliteDecisionLog _log;
+    private readonly FakeVision _vision = new();
     private readonly SortPipeline _pipeline;
 
     public SortPipelineTests()
@@ -31,10 +34,12 @@ public sealed class SortPipelineTests : IDisposable
             DatabasePath = Path.Combine(_temp.Path, "db", "test.db"),
         });
         var rules = Opt(DefaultRules());
+        var thresholds = Opt(new ThresholdsOptions());
         var store = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
         _log = new SqliteDecisionLog(paths);
         _pipeline = new SortPipeline(store, _focus,
-            new RulesEngine(rules, new GameDetector(rules, new NoTitles())), _log, paths, TimeProvider.System,
+            new RulesEngine(rules, new GameDetector(rules, new NoTitles())), new WicImageInspector(), _vision,
+            new VisionMapper(Opt(LmStudio()), rules, thresholds, paths), _log, paths, thresholds, TimeProvider.System,
             NullLogger<SortPipeline>.Instance);
     }
 
@@ -43,7 +48,7 @@ public sealed class SortPipelineTests : IDisposable
     [Fact]
     public async Task Process_MovesRenamesAndLogs()
     {
-        _focus.Record(Focus("Discord.exe", at: DateTimeOffset.UtcNow.AddMinutes(-1)));
+        FocusOn("Discord.exe");
         var file = _temp.File("Screenshot 2026-10-31 210412.png");
 
         var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
@@ -64,23 +69,46 @@ public sealed class SortPipelineTests : IDisposable
     [Fact]
     public async Task Process_NameCollision_AddsSuffix()
     {
-        _focus.Record(Focus("Code.exe", at: DateTimeOffset.UtcNow.AddMinutes(-1)));
-        var first = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
-        var second = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412 (2).png", 32), CancellationToken.None);
+        FocusOn("Code.exe");
+        var first = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png", seed: 1), CancellationToken.None);
+        var second = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412 (2).png", seed: 2), CancellationToken.None);
 
         Assert.EndsWith("Code_2026-10-31_21-04-12.png", first.TargetPath);
         Assert.EndsWith("Code_2026-10-31_21-04-12_2.png", second.TargetPath);
     }
 
     [Fact]
-    public async Task Process_UnknownApp_GoesToReview()
+    public async Task Process_UnknownApp_IsQueuedAndLeftInPlace()
     {
-        _focus.Record(Focus("notepad.exe", at: DateTimeOffset.UtcNow.AddMinutes(-1)));
+        FocusOn("notepad.exe");
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
 
-        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Queued, outcome.Kind);
+        Assert.Equal("notepad.exe", outcome.Focus?.ProcessName);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Process_BlackImage_GoesToReviewEvenWhenARuleMatches()
+    {
+        FocusOn("Code.exe");
+
+        var outcome = await _pipeline.ProcessAsync(_temp.Solid("Screenshot 2026-10-31 210412.png", 0), CancellationToken.None);
 
         Assert.Equal(SortOutcomeKind.Review, outcome.Kind);
-        Assert.Equal(Path.Combine(_temp.Path, "_Review", "notepad_2026-10-31_21-04-12.png"), outcome.TargetPath);
+        Assert.Equal(Path.Combine(_temp.Path, "_Review", "Code_2026-10-31_21-04-12.png"), outcome.TargetPath);
+    }
+
+    [Fact]
+    public async Task Process_CorruptImage_GoesToReview()
+    {
+        FocusOn("Code.exe");
+
+        var outcome = await _pipeline.ProcessAsync(_temp.Raw("Screenshot 2026-10-31 210412.png", [1, 2, 3, 4, 5]), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Review, outcome.Kind);
     }
 
     [Fact]
@@ -103,8 +131,76 @@ public sealed class SortPipelineTests : IDisposable
         Assert.Equal(SortOutcomeKind.Skipped, outcome.Kind);
     }
 
+    [Fact]
+    public async Task ProcessQueued_GameAnswer_SortsIntoGameFolder()
+    {
+        _vision.Result = new VisionResult("Game", "Hades", null, 0.95);
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
+
+        var outcome = await _pipeline.ProcessQueuedAsync(new VisionWorkItem(file, Focus("Hades.exe")), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
+        Assert.Equal(Path.Combine(_temp.Path, "Games", "Hades", "Hades_2026-10-31_21-04-12.png"), outcome.TargetPath);
+        Assert.Equal("Hades.exe", _vision.LastHint?.ProcessName);
+    }
+
+    [Fact]
+    public async Task ProcessQueued_LowConfidence_GoesToReview()
+    {
+        _vision.Result = new VisionResult("Browser", null, null, 0.4);
+
+        var outcome = await _pipeline.ProcessQueuedAsync(
+            new VisionWorkItem(_temp.File("Screenshot 2026-10-31 210412.png"), Focus("notepad.exe")), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Review, outcome.Kind);
+        Assert.EndsWith(Path.Combine("_Review", "notepad_2026-10-31_21-04-12.png"), outcome.TargetPath);
+    }
+
+    [Fact]
+    public async Task ProcessQueued_ModelUnavailable_Throws_AndLeavesFile()
+    {
+        _vision.Throw = true;
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
+
+        await Assert.ThrowsAsync<VisionUnavailableException>(() =>
+            _pipeline.ProcessQueuedAsync(new VisionWorkItem(file, null), CancellationToken.None));
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task ProcessQueued_FileGone_IsSkipped()
+    {
+        var outcome = await _pipeline.ProcessQueuedAsync(
+            new VisionWorkItem(Path.Combine(_temp.Path, "gone.png"), null), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Skipped, outcome.Kind);
+    }
+
+    internal static LmStudioOptions LmStudio() => new()
+    {
+        Categories = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Game"] = "Games", ["Chat"] = "Chat", ["Calls"] = "Calls", ["Browser"] = "Browser", ["Other"] = "Other",
+        },
+    };
+
+    private void FocusOn(string process) => _focus.Record(Focus(process, at: DateTimeOffset.UtcNow.AddMinutes(-1)));
+
     private sealed class NoTitles : IGameTitleProvider
     {
         public string? TryGetTitle(string exePath) => null;
+    }
+
+    private sealed class FakeVision : IVisionClassifier
+    {
+        public VisionResult? Result { get; set; }
+        public bool Throw { get; set; }
+        public FocusSnapshot? LastHint { get; private set; }
+
+        public Task<VisionResult?> ClassifyAsync(string imagePath, FocusSnapshot? hint, CancellationToken ct)
+        {
+            LastHint = hint;
+            return Throw ? throw new VisionUnavailableException("down") : Task.FromResult(Result);
+        }
     }
 }
