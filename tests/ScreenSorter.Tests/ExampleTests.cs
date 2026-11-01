@@ -59,6 +59,7 @@ public sealed class CorrectionProcessorTests : IDisposable
     private readonly FakeExampleStore _examples = new();
     private readonly SqliteDecisionLog _log;
     private readonly FileSystemScreenshotStore _files;
+    private readonly CorrectionsOptions _corrections = new();
     private readonly CorrectionProcessor _processor;
 
     public CorrectionProcessorTests()
@@ -71,7 +72,145 @@ public sealed class CorrectionProcessorTests : IDisposable
         });
         _log = new SqliteDecisionLog(paths);
         _files = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
-        _processor = new CorrectionProcessor(_files, _log, _embedder, _examples, paths, TimeProvider.System, NullLogger<CorrectionProcessor>.Instance);
+        _processor = new CorrectionProcessor(_files, _log, _embedder, _examples, paths, Opt(_corrections), TimeProvider.System, NullLogger<CorrectionProcessor>.Instance);
+    }
+
+    [Theory]
+    [InlineData(@"Games\Hades", "Screenshot 2026-10-10 121110.png", @"Games\Deadlock", "Deadlock_2026-10-10_12-11-10.png")]
+    [InlineData(@"Games\Hades", "Screenshot 2026-10-10 121110 (2).png", @"Games\Deadlock", "Deadlock_2026-10-10_12-11-10.png")]
+    [InlineData(@"Games\Hades", "Hades_2026-10-10_12-11-10.PNG", @"Games\Deadlock", "Deadlock_2026-10-10_12-11-10.png")]
+    [InlineData(@"Games\Hades", "Hades_2026-10-10_12-11-10_2.png", "Browser", "Browser_2026-10-10_12-11-10.png")]
+    [InlineData(@"Games\Hades", "Hades_2026-10-10_12-11-10.png", "_Review", "Screenshot_2026-10-10_12-11-10.png")]
+    [InlineData(@"_Review", "notepad_2026-10-10_12-11-10.png", @"Chat\My App", "My App_2026-10-10_12-11-10.png")]
+    public async Task MovedFile_IsRenamedToMatchItsFolder_ThenIgnored(string from, string name, string to, string expected)
+    {
+        var path = InFolder(from, name);
+        var hash = await PlacedByApp(path, from.Split('\\')[0], from.Contains('\\') ? from.Split('\\')[1] : null);
+        var moved = Move(path, to, _temp.Path);
+        var renamed = Path.Combine(_temp.Path, to, expected);
+
+        await _processor.ProcessAsync(moved, CancellationToken.None);
+
+        Assert.True(File.Exists(renamed));
+        Assert.False(File.Exists(moved) && !string.Equals(moved, renamed, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(renamed, (await _log.FindLatestByHashAsync(hash, CancellationToken.None))?.NewPath);
+        Assert.Contains(renamed, await _log.LatestPathsAsync(CancellationToken.None));
+
+        // The rename raises a watcher event for the new name; it must not count as another correction.
+        var examplesBefore = _examples.Stored.Count;
+        Assert.Equal(CorrectionOutcome.Ignored, await _processor.ProcessAsync(renamed, CancellationToken.None));
+        Assert.Equal(examplesBefore, _examples.Stored.Count);
+    }
+
+    [Theory]
+    [InlineData("Boss fight.png")]
+    [InlineData("Screenshot 2026-10-10 121110 boss fight.png")]
+    [InlineData("IMG_0001.png")]
+    public async Task NameTheUserChose_IsKept(string name)
+    {
+        var moved = InFolder(@"Games\Deadlock", name);
+
+        Assert.Equal(CorrectionOutcome.Learned, await _processor.ProcessAsync(moved, CancellationToken.None));
+        Assert.True(File.Exists(moved));
+    }
+
+    [Fact]
+    public async Task RenameCollision_AddsSuffix()
+    {
+        InFolder("Browser", "Browser_2026-10-10_12-11-10.png", seed: 1);
+        var moved = InFolder("Browser", "Screenshot 2026-10-10 121110.png", seed: 2);
+
+        await _processor.ProcessAsync(moved, CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(_temp.Path, "Browser", "Browser_2026-10-10_12-11-10_2.png")));
+    }
+
+    [Fact]
+    public async Task RenameOff_KeepsName()
+    {
+        _corrections.RenameMovedFiles = false;
+        var moved = InFolder(@"Games\Deadlock", "Screenshot 2026-10-10 121110.png");
+
+        Assert.Equal(CorrectionOutcome.Learned, await _processor.ProcessAsync(moved, CancellationToken.None));
+        Assert.True(File.Exists(moved));
+    }
+
+    [Fact]
+    public async Task HandSortedDeeperFolder_StaysThere()
+    {
+        var moved = InFolder(@"Games\Deadlock\Bosses", "Screenshot 2026-10-10 121110.png");
+
+        await _processor.ProcessAsync(moved, CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(_temp.Path, "Games", "Deadlock", "Bosses", "Deadlock_2026-10-10_12-11-10.png")));
+    }
+
+    [Fact]
+    public async Task StoreDown_DoesNotRenameYet()
+    {
+        var moved = InFolder(@"Games\Deadlock", "Screenshot 2026-10-10 121110.png");
+        _examples.Down = true;
+
+        Assert.Equal(CorrectionOutcome.RetryLater, await _processor.ProcessAsync(moved, CancellationToken.None));
+        Assert.True(File.Exists(moved));
+    }
+
+    [Fact]
+    public async Task FileMovedAwayDuringCheck_DoesNotRecreateItsFolder()
+    {
+        var moved = InFolder(@"Games\Deadlock", "Screenshot 2026-10-10 121110.png");
+        var away = Path.Combine(_temp.Path, "away.png");
+        var folder = Path.GetDirectoryName(moved)!;
+        var store = new MovesAwayWhileHashingStore(_files, () =>
+        {
+            File.Move(moved, away);
+            Directory.Delete(folder);
+        });
+        var processor = new CorrectionProcessor(store, _log, _embedder, _examples,
+            Opt(new PathsOptions { SortedRoot = _temp.Path, ReviewFolder = "_Review" }), Opt(_corrections), TimeProvider.System, NullLogger<CorrectionProcessor>.Instance);
+
+        await processor.ProcessAsync(moved, CancellationToken.None);
+
+        Assert.False(Directory.Exists(folder));
+        Assert.True(File.Exists(away));
+    }
+
+    private sealed class MovesAwayWhileHashingStore(IScreenshotStore inner, Action moveAway) : IScreenshotStore
+    {
+        public Task<bool> WaitUntilReadyAsync(string path, CancellationToken ct) => inner.WaitUntilReadyAsync(path, ct);
+        public DateTimeOffset GetCreationTime(string path) => inner.GetCreationTime(path);
+        public IReadOnlyList<string> ListSubfolders(string folder) => inner.ListSubfolders(folder);
+        public string Move(string source, string desiredTarget) => inner.Move(source, desiredTarget);
+
+        public async Task<string> ComputeHashAsync(string path, CancellationToken ct)
+        {
+            var hash = await inner.ComputeHashAsync(path, ct);
+            moveAway();
+            return hash;
+        }
+    }
+
+    [Fact]
+    public async Task LockedFile_StillLearns_KeepsNameAndCurrentPath()
+    {
+        var moved = InFolder(@"Games\Deadlock", "Screenshot 2026-10-10 121110.png");
+        var store = new RenameFailingStore(_files);
+        var processor = new CorrectionProcessor(store, _log, _embedder, _examples,
+            Opt(new PathsOptions { SortedRoot = _temp.Path, ReviewFolder = "_Review" }), Opt(_corrections), TimeProvider.System, NullLogger<CorrectionProcessor>.Instance);
+
+        Assert.Equal(CorrectionOutcome.Learned, await processor.ProcessAsync(moved, CancellationToken.None));
+
+        Assert.True(File.Exists(moved));
+        Assert.Contains(moved, await _log.LatestPathsAsync(CancellationToken.None));
+    }
+
+    private sealed class RenameFailingStore(IScreenshotStore inner) : IScreenshotStore
+    {
+        public Task<bool> WaitUntilReadyAsync(string path, CancellationToken ct) => inner.WaitUntilReadyAsync(path, ct);
+        public DateTimeOffset GetCreationTime(string path) => inner.GetCreationTime(path);
+        public Task<string> ComputeHashAsync(string path, CancellationToken ct) => inner.ComputeHashAsync(path, ct);
+        public IReadOnlyList<string> ListSubfolders(string folder) => inner.ListSubfolders(folder);
+        public string Move(string source, string desiredTarget) => throw new IOException("locked");
     }
 
     public void Dispose() => _temp.Dispose();

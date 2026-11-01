@@ -12,6 +12,9 @@ public sealed class CorrectionsOptions
     /// <summary>Interval of the rescan that catches dropped events, moves made while the app was off, and failed retries.</summary>
     public int RescanMinutes { get; set; } = 10;
 
+    /// <summary>Rename a screenshot to match the folder the user moved it to. Names the user chose are never changed.</summary>
+    public bool RenameMovedFiles { get; set; } = true;
+
     /// <summary>Configuration section name.</summary>
     public const string Section = "Corrections";
 }

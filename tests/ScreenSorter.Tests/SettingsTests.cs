@@ -63,7 +63,8 @@ public class SettingsEditModelTests
         new IdleOptions(),
         new LmStudioOptions { BaseUrl = "http://localhost:1234/v1", Model = "m", Categories = SortPipelineTests.LmStudio().Categories },
         new BacklogOptions(),
-        new NotificationsOptions());
+        new NotificationsOptions(),
+        new CorrectionsOptions());
 
     [Fact]
     public void Defaults_AreValid() => Assert.Empty(Model().Validate());
@@ -126,6 +127,7 @@ public class SettingsEditModelTests
         var model = Model();
         model.WatchFolders.Add(@"D:\Steam shots");
         model.BacklogEnabled = false;
+        model.RenameMovedFiles = false;
         model.NotificationsEnabled = false;
         model.VisionConfidence = "0,5";
         model.MaxGpuUtilPercent = "30";
@@ -154,6 +156,7 @@ public class SettingsEditModelTests
 
         Assert.Equal(2, config.GetSection(PathsOptions.Section).Get<PathsOptions>()!.WatchFolders.Count);
         Assert.False(config.GetSection(BacklogOptions.Section).Get<BacklogOptions>()!.Enabled);
+        Assert.False(config.GetSection(CorrectionsOptions.Section).Get<CorrectionsOptions>()!.RenameMovedFiles);
         Assert.Equal(NotificationsOptions.Off, config.GetSection(NotificationsOptions.Section).Get<NotificationsOptions>()!.Mode);
         Assert.Equal(0.5, config.GetSection(ThresholdsOptions.Section).Get<ThresholdsOptions>()!.VisionConfidence);
         Assert.Equal(30, config.GetSection(IdleOptions.Section).Get<IdleOptions>()!.MaxGpuUtilPercent);

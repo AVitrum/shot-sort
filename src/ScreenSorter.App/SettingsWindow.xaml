@@ -74,6 +74,7 @@
                         <TextBlock Style="{StaticResource Heading}" Text="Review folder name" />
                         <TextBox Text="{Binding ReviewFolder, UpdateSourceTrigger=PropertyChanged}" Width="200" HorizontalAlignment="Left" Margin="0,0,0,14" />
                         <CheckBox IsChecked="{Binding BacklogEnabled}" Content="Sort screenshots taken while the app was not running" />
+                        <CheckBox IsChecked="{Binding RenameMovedFiles}" Content="Rename screenshots I move to another folder" />
                         <CheckBox IsChecked="{Binding NotificationsEnabled}" Content="Show a notification after each batch" />
                         <CheckBox x:Name="StartWithWindowsBox" Content="Start with Windows" Margin="0" />
                     </StackPanel>

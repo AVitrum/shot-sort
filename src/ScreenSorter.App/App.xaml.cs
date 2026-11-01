@@ -115,7 +115,8 @@ public partial class App : Application
             services.GetRequiredService<IOptions<IdleOptions>>().Value,
             services.GetRequiredService<IOptions<LmStudioOptions>>().Value,
             services.GetRequiredService<IOptions<BacklogOptions>>().Value,
-            services.GetRequiredService<IOptions<NotificationsOptions>>().Value);
+            services.GetRequiredService<IOptions<NotificationsOptions>>().Value,
+            services.GetRequiredService<IOptions<CorrectionsOptions>>().Value);
 
         var wasEnabled = _runAtLogin.IsEnabled;
         _settings = new SettingsWindow(model, wasEnabled);

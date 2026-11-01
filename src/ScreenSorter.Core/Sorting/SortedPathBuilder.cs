@@ -37,8 +37,16 @@ public static class SortedPathBuilder
         }
 
         var name = Sanitize(string.IsNullOrWhiteSpace(classification.Name) ? sub ?? classification.Category : classification.Name);
-        return Path.Combine(folder, $"{name}_{captureLocal:yyyy-MM-dd_HH-mm-ss}{extension.ToLowerInvariant()}");
+        return Path.Combine(folder, FileName(name, captureLocal, extension));
     }
+
+    /// <summary>Builds the file name <c>&lt;Name&gt;_yyyy-MM-dd_HH-mm-ss.ext</c>.</summary>
+    /// <param name="name">The name part; it is sanitized.</param>
+    /// <param name="captureLocal">Local capture time.</param>
+    /// <param name="extension">Original extension, including the dot; written in lower case.</param>
+    /// <returns>The file name, without a folder.</returns>
+    public static string FileName(string name, DateTime captureLocal, string extension) =>
+        $"{Sanitize(name)}_{captureLocal:yyyy-MM-dd_HH-mm-ss}{extension.ToLowerInvariant()}";
 
     /// <summary>Inserts a collision suffix before the extension.</summary>
     /// <param name="path">A target path.</param>

@@ -24,7 +24,8 @@ public enum CorrectionOutcome
 
 /// <summary>
 /// Compares a file's folder with the decision log and learns from the difference.
-/// A file the log does not know counts as placed by the user.
+/// A file the log does not know counts as placed by the user. A file that changed folder is renamed to match its
+/// new folder, in place, unless the user gave it a name of their own.
 /// </summary>
 public sealed class CorrectionProcessor(
     IScreenshotStore files,
@@ -32,6 +33,7 @@ public sealed class CorrectionProcessor(
     IImageEmbedder embedder,
     IExampleStore examples,
     IOptions<PathsOptions> paths,
+    IOptions<CorrectionsOptions> corrections,
     TimeProvider time,
     ILogger<CorrectionProcessor> logger)
 {
@@ -77,10 +79,12 @@ public sealed class CorrectionProcessor(
             if (record is not null && SameLabel(record.Classification, category, sub))
                 return CorrectionOutcome.Ignored;
 
-            var classification = new Classification(category, sub, sub ?? category, 1.0, DecisionStage.UserCorrection);
+            var isReview = string.Equals(category, paths.Value.ReviewFolder, StringComparison.OrdinalIgnoreCase);
+            var name = isReview ? Classification.Review(category).Name : sub ?? category;
+            var classification = new Classification(category, sub, name, 1.0, DecisionStage.UserCorrection);
             var now = time.GetUtcNow();
             CorrectionOutcome outcome;
-            if (string.Equals(category, paths.Value.ReviewFolder, StringComparison.OrdinalIgnoreCase))
+            if (isReview)
             {
                 // A file nobody labelled has nothing to forget.
                 if (record is null)
@@ -96,9 +100,10 @@ public sealed class CorrectionProcessor(
             }
 
             // Logged last: if the store failed above, the rescan finds this file again and retries.
-            await log.RecordAsync(new SortRecord(record?.NewPath ?? path, path, hash, classification, record?.Focus, now), ct);
+            var finalPath = RenameToMatch(path, name);
+            await log.RecordAsync(new SortRecord(record?.NewPath ?? path, finalPath, hash, classification, record?.Focus, now), ct);
             logger.LogInformation("{Outcome} {Path}: was {Old}, now {Category}/{Sub}",
-                outcome, path, record is null ? "unknown" : $"{record.Classification.Category}/{record.Classification.SubFolder}", category, sub);
+                outcome, finalPath, record is null ? "unknown" : $"{record.Classification.Category}/{record.Classification.SubFolder}", category, sub);
             return outcome;
         }
         catch (ExamplesUnavailableException ex)
@@ -115,6 +120,29 @@ public sealed class CorrectionProcessor(
         {
             logger.LogWarning(ex, "Could not check {Path}", path);
             return CorrectionOutcome.RetryLater;
+        }
+    }
+
+    // A name without a known time format is one the user chose, so it stays. Failing to rename costs only the
+    // name: the example is already stored, and retrying would learn it again.
+    private string RenameToMatch(string path, string name)
+    {
+        if (!corrections.Value.RenameMovedFiles || CaptureTime.FromFileName(path) is not { } captured)
+            return path;
+
+        var target = Path.Combine(Path.GetDirectoryName(path)!, SortedPathBuilder.FileName(name, captured, Path.GetExtension(path)));
+        // A file the user has already moved on gets its own check at its new location. Moving it here would also
+        // recreate the folder it just left.
+        if (string.Equals(target, path, StringComparison.OrdinalIgnoreCase) || !File.Exists(path))
+            return path;
+        try
+        {
+            return files.Move(path, target);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Could not rename {Path}", path);
+            return path;
         }
     }
 

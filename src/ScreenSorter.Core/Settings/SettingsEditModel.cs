@@ -61,6 +61,9 @@ public sealed class SettingsEditModel
     /// <summary>Whether screenshots taken while the app was not running are sorted too.</summary>
     public bool BacklogEnabled { get; set; }
 
+    /// <summary>Whether a screenshot the user moves is renamed to match its new folder.</summary>
+    public bool RenameMovedFiles { get; set; }
+
     /// <summary>Whether batch summaries are shown.</summary>
     public bool NotificationsEnabled { get; set; }
 
@@ -112,16 +115,18 @@ public sealed class SettingsEditModel
     /// <param name="lmStudio">LM Studio settings.</param>
     /// <param name="backlog">Backlog settings.</param>
     /// <param name="notifications">Notification settings.</param>
+    /// <param name="corrections">Correction settings.</param>
     /// <returns>A model holding copies of the values.</returns>
     public static SettingsEditModel From(PathsOptions paths, RulesOptions rules, GameCatalogOptions catalog,
         ThresholdsOptions thresholds, IdleOptions idle, LmStudioOptions lmStudio, BacklogOptions backlog,
-        NotificationsOptions notifications)
+        NotificationsOptions notifications, CorrectionsOptions corrections)
     {
         var model = new SettingsEditModel
         {
             SortedRoot = paths.SortedRoot,
             ReviewFolder = paths.ReviewFolder,
             BacklogEnabled = backlog.Enabled,
+            RenameMovedFiles = corrections.RenameMovedFiles,
             NotificationsEnabled = !string.Equals(notifications.Mode, NotificationsOptions.Off, StringComparison.OrdinalIgnoreCase),
             BrowserProcesses = string.Join(", ", rules.BrowserProcesses),
             ExtraGameTitles = string.Join(Environment.NewLine, catalog.ExtraTitles),
@@ -220,6 +225,7 @@ public sealed class SettingsEditModel
                 [nameof(PathsOptions.ReviewFolder)] = ReviewFolder.Trim(),
             },
             [BacklogOptions.Section] = new JsonObject { [nameof(BacklogOptions.Enabled)] = BacklogEnabled },
+            [CorrectionsOptions.Section] = new JsonObject { [nameof(CorrectionsOptions.RenameMovedFiles)] = RenameMovedFiles },
             [NotificationsOptions.Section] = new JsonObject
             {
                 [nameof(NotificationsOptions.Mode)] = NotificationsEnabled ? NotificationsOptions.BatchSummary : NotificationsOptions.Off,

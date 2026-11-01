@@ -32,7 +32,7 @@ Each new screenshot goes through these stages:
 
 ## Teaching it
 
-Drag a screenshot into the right folder. A few seconds later it counts as an example of that folder. Moving a file into `_Review` removes the example. Renaming a folder relabels the files inside it.
+Drag a screenshot into the right folder. A few seconds later it counts as an example of that folder and is renamed to match, for example `Screenshot 2026-11-01 210412.png` becomes `Deadlock_2026-11-01_21-04-12.png`. A name you chose yourself is kept. Moving a file into `_Review` removes the example. Renaming a folder relabels the files inside it.
 
 ## Requirements
 
