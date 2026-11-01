@@ -4,12 +4,12 @@ namespace ScreenSorter.Core.Vision;
 
 /// <summary>A screenshot waiting for the vision model.</summary>
 /// <param name="Path">File at the top level of a watch folder; it stays there while queued.</param>
-/// <param name="Focus">Focused window at capture time, passed to the model as a hint.</param>
+/// <param name="Focus">Focused window at capture time, passed to the model as a hint; <see langword="null"/> for backlog files.</param>
 public sealed record VisionWorkItem(string Path, FocusSnapshot? Focus);
 
 /// <summary>
-/// FIFO of files waiting for the vision model. Thread-safe. Items can be put back at the front
-/// when the model is unavailable, so order is kept across retries.
+/// Files waiting for the vision model, oldest first with backlog files last. Thread-safe. Items can be put
+/// back at the front when the model is unavailable, so order is kept across retries.
 /// </summary>
 public sealed class VisionQueue
 {
@@ -29,13 +29,32 @@ public sealed class VisionQueue
         get { lock (_gate) return _items.Count; }
     }
 
-    /// <summary>Adds an item at the back.</summary>
+    /// <summary>
+    /// Adds an item at the back. A file with focus context goes ahead of waiting backlog files, so a new
+    /// screenshot does not wait behind a long import.
+    /// </summary>
     /// <param name="item">The file to classify.</param>
     public void Enqueue(VisionWorkItem item)
     {
         lock (_gate)
-            _items.AddLast(item);
+        {
+            var firstBacklog = item.Focus is null ? null : FirstBacklogNode();
+            if (firstBacklog is null)
+                _items.AddLast(item);
+            else
+                _items.AddBefore(firstBacklog, item);
+        }
         _available.Release();
+    }
+
+    private LinkedListNode<VisionWorkItem>? FirstBacklogNode()
+    {
+        for (var node = _items.First; node is not null; node = node.Next)
+        {
+            if (node.Value.Focus is null)
+                return node;
+        }
+        return null;
     }
 
     /// <summary>Puts an item back at the front, e.g. after a failed request.</summary>
