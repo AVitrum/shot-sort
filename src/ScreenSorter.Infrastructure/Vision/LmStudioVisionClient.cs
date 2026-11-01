@@ -15,7 +15,8 @@ namespace ScreenSorter.Infrastructure.Vision;
 /// <summary>
 /// <see cref="IVisionClassifier"/> using LM Studio's OpenAI-compatible <c>/chat/completions</c> with an
 /// image content part (base64 JPEG data URL) and <c>response_format.json_schema</c> structured output.
-/// The <c>ttl</c> field lets LM Studio unload the JIT-loaded model after the queue drains.
+/// <see cref="ReleaseModelAsync"/> ejects the model after a batch through LM Studio's own REST API; the <c>ttl</c>
+/// field is the safety net if that fails. Not thread-safe: one caller at a time, as <see cref="VisionWorker"/> does.
 /// </summary>
 public sealed class LmStudioVisionClient(
     HttpClient http,
@@ -28,10 +29,19 @@ public sealed class LmStudioVisionClient(
         "You classify Windows screenshots by the application or content they show. Reply only with the requested JSON.";
 
     private readonly LmStudioOptions _options = options.Value;
+    private bool _ownershipKnown;
+    private bool _weLoadedModel;
 
     /// <inheritdoc />
     public async Task<VisionResult?> ClassifyAsync(string imagePath, FocusSnapshot? hint, CancellationToken ct)
     {
+        // Asked before this request can load the model; a failure leaves it unknown, so the next request asks again.
+        if (_options.EjectAfterBatch && !_ownershipKnown && await TryListInstancesAsync(ct) is { } loaded)
+        {
+            _weLoadedModel = loaded.Count == 0;
+            _ownershipKnown = true;
+        }
+
         var jpeg = images.ToJpeg(imagePath, _options.MaxImageSide, _options.JpegQuality);
         var request = BuildRequest(Convert.ToBase64String(jpeg), hint, games.GetTitles());
 
@@ -55,6 +65,37 @@ public sealed class LmStudioVisionClient(
         }
 
         return Parse(body);
+    }
+
+    /// <inheritdoc />
+    public async Task ReleaseModelAsync(CancellationToken ct)
+    {
+        var ours = _ownershipKnown && _weLoadedModel;
+        _ownershipKnown = false;
+        if (!ours)
+            return;
+
+        // Failures only delay the unload: the request's ttl still frees the model.
+        var instances = await TryListInstancesAsync(ct);
+        if (instances is null)
+            return;
+        foreach (var id in instances)
+        {
+            try
+            {
+                using var timeout = ManagementTimeout(ct);
+                using var response = await http.PostAsJsonAsync(ManagementEndpoint("/models/unload"),
+                    new JsonObject { ["instance_id"] = id }, timeout.Token);
+                if (response.IsSuccessStatusCode)
+                    logger.LogInformation("Ejected {Instance} from LM Studio", id);
+                else
+                    logger.LogWarning("Could not eject {Instance}: LM Studio returned {Status}; it unloads after {Ttl} s", id, (int)response.StatusCode, _options.TtlSeconds);
+            }
+            catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+            {
+                logger.LogWarning(ex, "Could not eject {Instance}; it unloads after {Ttl} s", id, _options.TtlSeconds);
+            }
+        }
     }
 
     /// <summary>Builds the chat-completions request body.</summary>
@@ -154,6 +195,42 @@ public sealed class LmStudioVisionClient(
     }
 
     private Uri Endpoint() => new(_options.BaseUrl.TrimEnd('/') + "/chat/completions");
+
+    private Uri ManagementEndpoint(string path) => new(_options.ManagementUrl.TrimEnd('/') + path);
+
+    private CancellationTokenSource ManagementTimeout(CancellationToken ct)
+    {
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(_options.ManagementTimeoutSeconds));
+        return timeout;
+    }
+
+    // Returns the configured model's loaded instance ids, or null if LM Studio could not be asked.
+    private async Task<IReadOnlyList<string>?> TryListInstancesAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var timeout = ManagementTimeout(ct);
+            using var response = await http.GetAsync(ManagementEndpoint("/models"), timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogDebug("LM Studio model list returned {Status}", (int)response.StatusCode);
+                return null;
+            }
+
+            var models = JsonNode.Parse(await response.Content.ReadAsStringAsync(timeout.Token))?["models"]?.AsArray();
+            if (models is null)
+                return null;
+            var model = models.FirstOrDefault(m => m?["key"]?.GetValue<string>() == _options.Model);
+            return model?["loaded_instances"]?.AsArray().Select(i => i!["id"]!.GetValue<string>()).ToList() ?? [];
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException
+                                   || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            logger.LogDebug(ex, "Could not list LM Studio models");
+            return null;
+        }
+    }
 
     private static string UserPrompt(IReadOnlyList<string> categories, FocusSnapshot? hint, IReadOnlyList<string> knownGames)
     {

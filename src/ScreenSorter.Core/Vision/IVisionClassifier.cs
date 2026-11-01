@@ -12,6 +12,14 @@ public interface IVisionClassifier
     /// <returns>The model's answer, or <see langword="null"/> if it answered but the answer was unusable.</returns>
     /// <exception cref="VisionUnavailableException">The model could not be reached or failed; retry later.</exception>
     Task<VisionResult?> ClassifyAsync(string imagePath, FocusSnapshot? hint, CancellationToken ct);
+
+    /// <summary>
+    /// Frees the model's memory after a batch, if <see cref="ClassifyAsync"/> caused it to load. A model that was
+    /// already loaded before the batch is left alone. Does nothing if no classification happened since the last
+    /// release. Best effort: failures are logged, never thrown.
+    /// </summary>
+    /// <param name="ct">Cancels the request.</param>
+    Task ReleaseModelAsync(CancellationToken ct);
 }
 
 /// <summary>A parsed vision-model answer.</summary>

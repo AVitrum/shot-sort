@@ -275,5 +275,7 @@ public sealed class SortPipelineTests : IDisposable
             LastHint = hint;
             return Throw ? throw new VisionUnavailableException("down") : Task.FromResult(Result);
         }
+
+        public Task ReleaseModelAsync(CancellationToken ct) => Task.CompletedTask;
     }
 }

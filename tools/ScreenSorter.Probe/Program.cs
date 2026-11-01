@@ -66,6 +66,7 @@ async Task<int> ClassifyAsync()
         }
         count++;
     }
+    await vision.ReleaseModelAsync(CancellationToken.None);
     Console.WriteLine($"{count} file(s) in {total.Elapsed.TotalSeconds:0.0} s");
     return 0;
 }

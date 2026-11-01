@@ -27,7 +27,19 @@ public sealed class LmStudioOptions
     /// <summary>Per-request timeout. The first request may include loading the model.</summary>
     public int TimeoutSeconds { get; set; } = 180;
 
-    /// <summary>Idle time after which LM Studio unloads a JIT-loaded model (<c>ttl</c> request field).</summary>
+    /// <summary>LM Studio's own REST API, used to list and unload models, e.g. <c>http://localhost:1234/api/v1</c>.</summary>
+    public string ManagementUrl { get; set; } = "http://localhost:1234/api/v1";
+
+    /// <summary>Unload the model as soon as a batch ends, instead of waiting for <see cref="TtlSeconds"/>.</summary>
+    public bool EjectAfterBatch { get; set; } = true;
+
+    /// <summary>Timeout for list and unload requests.</summary>
+    public int ManagementTimeoutSeconds { get; set; } = 10;
+
+    /// <summary>
+    /// Idle time after which LM Studio unloads a JIT-loaded model (<c>ttl</c> request field). A safety net for
+    /// when <see cref="EjectAfterBatch"/> is off or its request fails.
+    /// </summary>
     public int TtlSeconds { get; set; } = 300;
 
     /// <summary>Wait before retrying after LM Studio was unreachable or returned an error.</summary>

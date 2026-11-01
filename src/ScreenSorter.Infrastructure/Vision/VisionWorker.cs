@@ -12,7 +12,8 @@ namespace ScreenSorter.Infrastructure.Vision;
 /// <summary>
 /// Drains <see cref="VisionQueue"/> through <see cref="SortPipeline.ProcessQueuedAsync"/> only while the
 /// system is idle. "Sort now" ignores the idle rules until the queue is empty. When LM Studio is
-/// unavailable the item is put back and the worker waits <see cref="LmStudioOptions.RetryMinutes"/>.
+/// unavailable the item is put back and the worker waits <see cref="LmStudioOptions.RetryMinutes"/>. The model is
+/// released whenever work stops: queue drained, idle ended, paused, request failed, or shutdown (D-022).
 /// </summary>
 /// <remarks>
 /// The GPU condition is only checked before the first item of a batch: the model's own inference
@@ -21,6 +22,7 @@ namespace ScreenSorter.Infrastructure.Vision;
 public sealed class VisionWorker(
     VisionQueue queue,
     SortPipeline pipeline,
+    IVisionClassifier vision,
     IdleDetector idle,
     SortActivity activity,
     IOptions<IdleOptions> idleOptions,
@@ -46,6 +48,7 @@ public sealed class VisionWorker(
         finally
         {
             activity.SortNowRequested -= OnSortNow;
+            await vision.ReleaseModelAsync(CancellationToken.None);
         }
     }
 
@@ -58,7 +61,12 @@ public sealed class VisionWorker(
         while (true)
         {
             await queue.WaitForItemAsync(ct);
-            await activity.WaitWhilePausedAsync(ct);
+            if (activity.IsPaused)
+            {
+                inBatch = false;
+                await vision.ReleaseModelAsync(ct);
+                await activity.WaitWhilePausedAsync(ct);
+            }
 
             if (!_force)
             {
@@ -69,6 +77,8 @@ public sealed class VisionWorker(
                         logger.LogInformation("{Count} file(s) waiting for idle: {Reason}", queue.Count, status.Reason);
                     lastReason = status.Reason;
                     inBatch = false;
+                    // The user is back: the model must not hold VRAM while files wait for the next idle period.
+                    await vision.ReleaseModelAsync(ct);
                     await SleepAsync(TimeSpan.FromSeconds(Math.Max(5, idleOptions.Value.CheckIntervalSeconds)), ct);
                     continue;
                 }
@@ -87,6 +97,7 @@ public sealed class VisionWorker(
                 inBatch = false;
                 _force = false;
                 logger.LogWarning(ex, "Vision model unavailable; retrying in {Minutes} min", lmStudio.Value.RetryMinutes);
+                await vision.ReleaseModelAsync(ct);
                 await SleepAsync(TimeSpan.FromMinutes(Math.Max(1, lmStudio.Value.RetryMinutes)), ct);
                 continue;
             }
@@ -103,6 +114,7 @@ public sealed class VisionWorker(
                 sorted = review = 0;
                 inBatch = false;
                 _force = false;
+                await vision.ReleaseModelAsync(ct);
             }
         }
     }
