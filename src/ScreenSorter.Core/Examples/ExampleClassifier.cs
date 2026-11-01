@@ -6,7 +6,7 @@ using ScreenSorter.Core.Sorting;
 
 namespace ScreenSorter.Core.Examples;
 
-/// <summary>Classifies a screenshot by its nearest confirmed examples (plan section 4, step 4).</summary>
+/// <summary>Classifies a screenshot by its nearest confirmed examples.</summary>
 public sealed class ExampleClassifier(
     IImageEmbedder embedder,
     IExampleStore store,

@@ -9,6 +9,8 @@ path_problem() {
     case "$1" in
         .claude/*|*/.claude/*|CLAUDE.md|*/CLAUDE.md|agent-rules.md)
             echo "agent files stay local" ;;
+        plan.md)
+            echo "local planning file" ;;
         .env|.env.*|*/.env|*/.env.*|secrets.json|*/secrets.json|*.pfx|*.p12|*.snk|*.pem|*.key|*.pubxml|*.publishsettings)
             echo "secret or credential file" ;;
         appsettings.*.json|*/appsettings.*.json)

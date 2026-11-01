@@ -22,7 +22,7 @@ public interface ISystemActivity
 /// <param name="Reason">Why not, for logs and the tray tooltip; empty when idle.</param>
 public sealed record IdleStatus(bool IsIdle, string Reason);
 
-/// <summary>Decides whether the system is idle enough to run the vision model (plan section 4, "Idle detection").</summary>
+/// <summary>Decides whether the system is idle enough to run the vision model.</summary>
 public sealed class IdleDetector(ISystemActivity activity, IOptions<IdleOptions> options)
 {
     /// <summary>Checks all idle conditions. Cheap conditions are checked first.</summary>
