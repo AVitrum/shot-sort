@@ -21,6 +21,9 @@ public sealed class PathsOptions
     /// <summary>Path of the SQLite decision log.</summary>
     public string DatabasePath { get; set; } = "";
 
+    /// <summary>File where the settings window saves its values; layered over <c>appsettings.json</c>.</summary>
+    public string UserSettingsPath { get; set; } = "";
+
     /// <summary>Folder for the app's log files.</summary>
     public string LogFolder { get; set; } = "";
 

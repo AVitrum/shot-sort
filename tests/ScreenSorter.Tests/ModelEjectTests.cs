@@ -235,11 +235,12 @@ public sealed class VisionWorkerEjectTests : IDisposable
     {
         _activity.SinceInput = TimeSpan.Zero;
         await _worker.StartAsync(CancellationToken.None);
-        var before = _vision.Releases;
+        // The worker starts on the thread pool; stopping before it runs would leave nothing to eject.
+        await WaitForAsync(() => _activity.Checked);
 
         await _worker.StopAsync(CancellationToken.None);
 
-        Assert.Equal(before + 1, _vision.Releases);
+        Assert.Equal(1, _vision.Releases);
     }
 
     private static async Task WaitForAsync(Func<bool> condition)
@@ -256,7 +257,14 @@ public sealed class VisionWorkerEjectTests : IDisposable
     {
         public TimeSpan SinceInput { get; set; } = TimeSpan.FromHours(1);
 
-        public TimeSpan TimeSinceLastInput() => SinceInput;
+        public volatile bool Checked;
+
+        public TimeSpan TimeSinceLastInput()
+        {
+            Checked = true;
+            return SinceInput;
+        }
+
         public bool IsFullscreenAppFocused() => false;
         public int? GpuUtilizationPercent() => 0;
     }
