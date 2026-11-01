@@ -15,4 +15,9 @@ public interface IDecisionLog
     /// <param name="ct">Cancels the query.</param>
     /// <returns>The record, or <see langword="null"/> if the file was never sorted by the app.</returns>
     Task<SortRecord?> FindLatestByHashAsync(string fileHash, CancellationToken ct);
+
+    /// <summary>Returns where each known file was last recorded, so a rescan can skip files that have not moved.</summary>
+    /// <param name="ct">Cancels the query.</param>
+    /// <returns>The latest <see cref="SortRecord.NewPath"/> per file hash, compared case-insensitively.</returns>
+    Task<IReadOnlySet<string>> LatestPathsAsync(CancellationToken ct);
 }

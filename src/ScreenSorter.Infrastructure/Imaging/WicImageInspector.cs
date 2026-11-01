@@ -51,6 +51,29 @@ public sealed class WicImageInspector : IImageInspector
         return ms.ToArray();
     }
 
+    /// <inheritdoc />
+    public byte[] ToCenterCropRgb(string imagePath, int size)
+    {
+        var original = ReadSize(imagePath);
+        // Scaling one dimension keeps the aspect ratio. WIC's scaler differs from CLIP's bicubic, which is fine
+        // as long as stored examples and queries use the same path (ADR-0003).
+        var scaled = original.Width >= original.Height ? Decode(imagePath, 0, size) : Decode(imagePath, size, 0);
+        var rgb = new FormatConvertedBitmap(scaled, PixelFormats.Rgb24, null, 0);
+        rgb.Freeze();
+
+        var x = Math.Max(0, (rgb.PixelWidth - size) / 2);
+        var y = Math.Max(0, (rgb.PixelHeight - size) / 2);
+        var w = Math.Min(size, rgb.PixelWidth - x);
+        var h = Math.Min(size, rgb.PixelHeight - y);
+        var cropped = new CroppedBitmap(rgb, new System.Windows.Int32Rect(x, y, w, h));
+        cropped.Freeze();
+
+        // Rounding can leave the scaled short side a pixel under size; unset pixels stay black.
+        var pixels = new byte[size * size * 3];
+        cropped.CopyPixels(pixels, size * 3, 0);
+        return pixels;
+    }
+
     private static (int Width, int Height) ReadSize(string path)
     {
         return Wrap(path, () =>

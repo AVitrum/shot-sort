@@ -99,6 +99,19 @@ public sealed class SqliteDecisionLog : IDecisionLog
             ParseTime(r.GetString(12)));
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> LatestPathsAsync(CancellationToken ct)
+    {
+        await using var connection = await OpenAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT new_path FROM decisions WHERE id IN (SELECT MAX(id) FROM decisions GROUP BY file_hash);";
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (await r.ReadAsync(ct))
+            paths.Add(r.GetString(0));
+        return paths;
+    }
+
     private async Task<SqliteConnection> OpenAsync(CancellationToken ct)
     {
         await _init.Value;

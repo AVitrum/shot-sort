@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using ScreenSorter.Core.Configuration;
+using ScreenSorter.Core.Examples;
 using ScreenSorter.Core.Focus;
 using ScreenSorter.Core.Models;
 using ScreenSorter.Core.Rules;
@@ -19,6 +20,8 @@ public sealed class SortPipelineTests : IDisposable
     private readonly FocusHistory _focus;
     private readonly SqliteDecisionLog _log;
     private readonly FakeVision _vision = new();
+    private readonly FakeEmbedder _embedder = new();
+    private readonly FakeExampleStore _examples = new();
     private readonly SortPipeline _pipeline;
 
     public SortPipelineTests()
@@ -37,8 +40,9 @@ public sealed class SortPipelineTests : IDisposable
         var thresholds = Opt(new ThresholdsOptions());
         var store = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
         _log = new SqliteDecisionLog(paths);
+        var examples = new ExampleClassifier(_embedder, _examples, Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
         _pipeline = new SortPipeline(store, _focus,
-            new RulesEngine(rules, new GameDetector(rules, new NoTitles())), new WicImageInspector(), _vision,
+            new RulesEngine(rules, new GameDetector(rules, new NoTitles())), examples, new WicImageInspector(), _vision,
             new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, TimeProvider.System,
             NullLogger<SortPipeline>.Instance);
     }
@@ -88,6 +92,75 @@ public sealed class SortPipelineTests : IDisposable
         Assert.Equal(SortOutcomeKind.Queued, outcome.Kind);
         Assert.Equal("notepad.exe", outcome.Focus?.ProcessName);
         Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Process_NoExamplesStored_DoesNotLoadTheModel()
+    {
+        FocusOn("Code.exe");
+
+        await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(0, _embedder.Calls);
+    }
+
+    [Fact]
+    public async Task Process_NoRule_ConfidentExample_SortsByExample()
+    {
+        FocusOn("notepad.exe");
+        _examples.Hits.Add(new ExampleHit(0.97, "Games", "Deadlock"));
+
+        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
+        Assert.Equal(Path.Combine(_temp.Path, "Games", "Deadlock", "Deadlock_2026-10-31_21-04-12.png"), outcome.TargetPath);
+    }
+
+    [Fact]
+    public async Task Process_RuleAgreesWithExample_SortsByRule()
+    {
+        FocusOn("Discord.exe");
+        _examples.Hits.Add(new ExampleHit(0.97, "chat", "DISCORD"));
+
+        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(Path.Combine(_temp.Path, "Chat", "Discord", "Discord_2026-10-31_21-04-12.png"), outcome.TargetPath);
+    }
+
+    [Fact]
+    public async Task Process_RuleConflictsWithExample_GoesToVisionQueue()
+    {
+        // A region snip of Discord while another app has focus.
+        FocusOn("Code.exe");
+        _examples.Hits.Add(new ExampleHit(0.97, "Chat", "Discord"));
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Queued, outcome.Kind);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Process_WeakExample_DoesNotConflictWithRule()
+    {
+        FocusOn("Code.exe");
+        _examples.Hits.Add(new ExampleHit(0.5, "Chat", "Discord"));
+
+        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task Process_ExampleStoreDown_RulesStillWork()
+    {
+        FocusOn("Code.exe");
+        _examples.Down = true;
+
+        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
     }
 
     [Fact]

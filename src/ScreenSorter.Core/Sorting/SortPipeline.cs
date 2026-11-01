@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ScreenSorter.Core.Configuration;
+using ScreenSorter.Core.Examples;
 using ScreenSorter.Core.Focus;
 using ScreenSorter.Core.Models;
 using ScreenSorter.Core.Rules;
@@ -10,18 +11,19 @@ namespace ScreenSorter.Core.Sorting;
 
 /// <summary>
 /// Processes screenshots in two stages. <see cref="ProcessAsync"/> (instant): wait for the file,
-/// look up focus, reject black images, apply rules. <see cref="ProcessQueuedAsync"/> (when idle):
-/// ask the vision model. Both end in the same move-rename-log step.
+/// look up focus, reject black images, apply rules and confirmed examples. <see cref="ProcessQueuedAsync"/>
+/// (when idle): ask the vision model. Both end in the same move-rename-log step.
 /// </summary>
 /// <remarks>
 /// Files without focus history (backlog) are left in place as <see cref="SortOutcomeKind.Deferred"/>
-/// (D-003). Files whose focused app matches no rule stay in place and are returned as
-/// <see cref="SortOutcomeKind.Queued"/> for the vision queue.
+/// (D-003). Files that neither rules nor examples can place, or where the two disagree, stay in place and
+/// are returned as <see cref="SortOutcomeKind.Queued"/> for the vision queue.
 /// </remarks>
 public sealed class SortPipeline(
     IScreenshotStore store,
     IFocusHistory focus,
     RulesEngine rules,
+    ExampleClassifier examples,
     IImageInspector images,
     IVisionClassifier vision,
     VisionMapper visionMapper,
@@ -58,11 +60,16 @@ public sealed class SortPipeline(
             if (IsBlank(path))
                 return await ActAsync(path, Classification.Review(_paths.ReviewFolder, DecisionStage.ImageCheck), snapshot, ct);
 
-            var classification = rules.Classify(snapshot);
-            if (classification is not null)
-                return await ActAsync(path, classification, snapshot, ct);
+            var rule = rules.Classify(snapshot);
+            var example = await TryExamplesAsync(path, ct);
+            if (rule is not null && (example is null || SameFolder(rule, example)))
+                return await ActAsync(path, rule, snapshot, ct);
+            if (rule is null && example is not null)
+                return await ActAsync(path, example, snapshot, ct);
 
-            logger.LogInformation("Queued {Path} for the vision model ({Process})", path, snapshot.ProcessName);
+            // Focus is only a hint: a region snip can show a window that was not focused. On conflict the model decides.
+            logger.LogInformation("Queued {Path} for the vision model ({Process}; rule {Rule}, examples {Example})",
+                path, snapshot.ProcessName, rule?.Category, example?.Category);
             return new SortOutcome(SortOutcomeKind.Queued, path, Focus: snapshot);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -106,6 +113,23 @@ public sealed class SortPipeline(
             return new SortOutcome(SortOutcomeKind.Skipped, item.Path);
         }
     }
+
+    private async Task<Classification?> TryExamplesAsync(string path, CancellationToken ct)
+    {
+        try
+        {
+            return await examples.TryClassifyAsync(path, ct);
+        }
+        catch (InvalidDataException ex)
+        {
+            logger.LogWarning(ex, "{Path} is not a decodable image", path);
+            return null;
+        }
+    }
+
+    private static bool SameFolder(Classification a, Classification b) =>
+        string.Equals(a.Category, b.Category, StringComparison.OrdinalIgnoreCase)
+        && SortedPathBuilder.MatchKey(a.SubFolder ?? "") == SortedPathBuilder.MatchKey(b.SubFolder ?? "");
 
     private bool IsBlank(string path)
     {

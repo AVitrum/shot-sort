@@ -18,4 +18,12 @@ public interface IImageInspector
     /// <exception cref="IOException">The file could not be read.</exception>
     /// <exception cref="InvalidDataException">The file is not a decodable image.</exception>
     byte[] ToJpeg(string imagePath, int maxSide, int jpegQuality);
+
+    /// <summary>Scales the short side to <paramref name="size"/> and takes the center square, as CLIP expects.</summary>
+    /// <param name="imagePath">A PNG or JPEG file.</param>
+    /// <param name="size">Side of the square in pixels.</param>
+    /// <returns><c>size * size * 3</c> bytes, RGB, row by row.</returns>
+    /// <exception cref="IOException">The file could not be read.</exception>
+    /// <exception cref="InvalidDataException">The file is not a decodable image.</exception>
+    byte[] ToCenterCropRgb(string imagePath, int size);
 }

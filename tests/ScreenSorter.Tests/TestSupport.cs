@@ -60,6 +60,9 @@ internal sealed class TempFolder : IDisposable
         return path;
     }
 
+    /// <summary>Writes a PNG with exact gray pixels.</summary>
+    public string Gray(string name, int width, int height, byte[] pixels) => Png(name, width, height, pixels);
+
     private string Png(string name, int width, int height, byte[] pixels)
     {
         var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(width, height, 96, 96,
@@ -76,6 +79,48 @@ internal sealed class TempFolder : IDisposable
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try { Directory.Delete(Path, recursive: true); } catch (IOException) { }
+    }
+}
+
+internal sealed class FakeEmbedder : ScreenSorter.Core.Examples.IImageEmbedder
+{
+    public int Calls { get; private set; }
+
+    public Task<float[]> EmbedAsync(string imagePath, CancellationToken ct)
+    {
+        Calls++;
+        return Task.FromResult(new float[] { 1, 0 });
+    }
+}
+
+internal sealed class FakeExampleStore : ScreenSorter.Core.Examples.IExampleStore
+{
+    public bool Down { get; set; }
+    public List<ScreenSorter.Core.Examples.ExampleHit> Hits { get; } = [];
+    public Dictionary<string, ScreenSorter.Core.Examples.Example> Stored { get; } = [];
+    public List<string> Deleted { get; } = [];
+
+    public Task<long> CountAsync(CancellationToken ct) { Fail(); return Task.FromResult((long)Hits.Count); }
+
+    public Task UpsertAsync(ScreenSorter.Core.Examples.Example example, float[] vector, CancellationToken ct)
+    {
+        Fail();
+        Stored[example.FileHash] = example;
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(string fileHash, CancellationToken ct) { Fail(); Deleted.Add(fileHash); return Task.CompletedTask; }
+
+    public Task<IReadOnlyList<ScreenSorter.Core.Examples.ExampleHit>> SearchAsync(float[] vector, int limit, CancellationToken ct)
+    {
+        Fail();
+        return Task.FromResult<IReadOnlyList<ScreenSorter.Core.Examples.ExampleHit>>(Hits);
+    }
+
+    private void Fail()
+    {
+        if (Down)
+            throw new ScreenSorter.Core.Examples.ExamplesUnavailableException("down");
     }
 }
 
