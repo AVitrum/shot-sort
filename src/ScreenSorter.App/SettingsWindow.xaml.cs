@@ -30,6 +30,11 @@ public partial class SettingsWindow : Window
     /// <summary>The state of the Start with Windows checkbox.</summary>
     public bool StartWithWindows => StartWithWindowsBox.IsChecked == true;
 
+    /// <summary>Raised when the user asks for the guide.</summary>
+    public event EventHandler? GuideRequested;
+
+    private void OnOpenGuide(object sender, RoutedEventArgs e) => GuideRequested?.Invoke(this, EventArgs.Empty);
+
     private void OnSave(object sender, RoutedEventArgs e)
     {
         // A cell still in edit mode has not reached the model yet.
@@ -63,6 +68,33 @@ public partial class SettingsWindow : Window
     {
         if (PickFolder() is { } folder)
             SortedRootBox.Text = folder;
+    }
+
+    private void OnAddRule(object sender, RoutedEventArgs e) => AddRow(RulesGrid, _model.Rules, new RuleRow());
+
+    private void OnRemoveRule(object sender, RoutedEventArgs e) => RemoveSelectedRow(RulesGrid, _model.Rules);
+
+    private void OnAddAlias(object sender, RoutedEventArgs e) => AddRow(AliasesGrid, _model.GameAliases, new AliasRow());
+
+    private void OnRemoveAlias(object sender, RoutedEventArgs e) => RemoveSelectedRow(AliasesGrid, _model.GameAliases);
+
+    private static void AddRow<T>(DataGrid grid, ICollection<T> rows, T row)
+    {
+        grid.CommitEdit(DataGridEditingUnit.Row, exitEditingMode: true);
+        rows.Add(row);
+        grid.SelectedItem = row;
+        grid.ScrollIntoView(row);
+        grid.CurrentCell = new DataGridCellInfo(row, grid.Columns[0]);
+        grid.Focus();
+        grid.BeginEdit();
+    }
+
+    private static void RemoveSelectedRow<T>(DataGrid grid, ICollection<T> rows)
+    {
+        // Cancel, not commit: a row in edit mode cannot be removed, and its edits are going away with it.
+        grid.CancelEdit(DataGridEditingUnit.Row);
+        if (grid.SelectedItem is T row)
+            rows.Remove(row);
     }
 
     private void OnMoveRuleUp(object sender, RoutedEventArgs e) => MoveRule(-1);

@@ -3,179 +3,240 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="ScreenSorter settings"
         Icon="/Assets/app.ico"
-        Width="780" Height="620" MinWidth="640" MinHeight="480"
+        Width="900" Height="680" MinWidth="720" MinHeight="520"
         WindowStartupLocation="CenterScreen"
-        UseLayoutRounding="True"
-        TextOptions.TextFormattingMode="Display">
-    <Window.Resources>
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="4,3" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="12,4" />
-            <Setter Property="MinWidth" Value="76" />
-        </Style>
-        <Style TargetType="CheckBox">
-            <Setter Property="Margin" Value="0,0,0,8" />
-        </Style>
-        <Style TargetType="DataGrid">
-            <Setter Property="AutoGenerateColumns" Value="False" />
-            <Setter Property="HeadersVisibility" Value="Column" />
-            <Setter Property="GridLinesVisibility" Value="Horizontal" />
-            <Setter Property="HorizontalGridLinesBrush" Value="#E2E2E2" />
-        </Style>
-        <Style x:Key="Heading" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,0,0,6" />
-        </Style>
-        <Style x:Key="Hint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#5F5F5F" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-            <Setter Property="Margin" Value="0,0,0,8" />
-        </Style>
-    </Window.Resources>
-
-    <DockPanel Margin="12">
-        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0" LastChildFill="True">
+        UseLayoutRounding="True">
+    <DockPanel>
+        <DockPanel DockPanel.Dock="Bottom" Margin="16,8,24,16" LastChildFill="True">
+            <Button DockPanel.Dock="Left" Click="OnOpenGuide" Width="172" VerticalAlignment="Bottom"
+                    AutomationProperties.Name="How it works">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE897;" Margin="0,0,8,0" />
+                    <TextBlock Text="How it works" />
+                </StackPanel>
+            </Button>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom">
-                <Button x:Name="SaveButton" Content="Save and restart" IsDefault="True" Click="OnSave" Margin="0,0,8,0" />
-                <Button Content="Cancel" IsCancel="True" Click="OnCancel" />
+                <Button x:Name="SaveButton" Content="Save and restart" IsDefault="True" Click="OnSave" Margin="0,0,8,0"
+                        Style="{DynamicResource AccentButtonStyle}" />
+                <Button Content="Cancel" IsCancel="True" Click="OnCancel" MinWidth="88" />
             </StackPanel>
-            <TextBlock x:Name="Problems" Foreground="#B00020" TextWrapping="Wrap" Margin="0,0,12,0" VerticalAlignment="Center" />
+            <TextBlock x:Name="Problems" Foreground="{DynamicResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
+                       Margin="16,0,16,0" VerticalAlignment="Center" />
         </DockPanel>
 
-        <TabControl x:Name="Tabs">
-            <TabItem Header="General">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" MinHeight="90" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Style="{StaticResource Heading}" Text="Watch folders" />
-                    <DockPanel Grid.Row="1" Margin="0,0,0,14">
-                        <StackPanel DockPanel.Dock="Right" Margin="8,0,0,0">
-                            <Button Content="Add..." Click="OnAddWatchFolder" Margin="0,0,0,6" />
-                            <Button Content="Remove" Click="OnRemoveWatchFolder" />
-                        </StackPanel>
-                        <ListBox x:Name="WatchFolderList" ItemsSource="{Binding WatchFolders}" />
-                    </DockPanel>
+        <TabControl x:Name="Tabs" Style="{StaticResource SideNavigation}" ItemContainerStyle="{StaticResource SideNavigationItem}">
+            <TabItem Header="General" Tag="&#xE713;">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,16,24,8">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="General" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,16" Text="Where screenshots come from, where they go, and how the app behaves." />
 
-                    <TextBlock Grid.Row="2" Style="{StaticResource Heading}" Text="Sorted screenshots go under" />
-                    <DockPanel Grid.Row="3" Margin="0,0,0,14">
-                        <Button DockPanel.Dock="Right" Content="Browse..." Click="OnBrowseSortedRoot" Margin="8,0,0,0" />
-                        <TextBox x:Name="SortedRootBox" Text="{Binding SortedRoot, UpdateSourceTrigger=PropertyChanged}" />
-                    </DockPanel>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Watch folders" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="New screenshots are picked up from these folders." />
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Right" Margin="8,0,0,0">
+                                        <Button Content="Add..." Click="OnAddWatchFolder" Margin="0,0,0,6" MinWidth="88" />
+                                        <Button Content="Remove" Click="OnRemoveWatchFolder" MinWidth="88" />
+                                    </StackPanel>
+                                    <ListBox x:Name="WatchFolderList" ItemsSource="{Binding WatchFolders}" MinHeight="80" MaxHeight="120" Background="Transparent"
+                                             BorderThickness="1" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
 
-                    <StackPanel Grid.Row="4">
-                        <TextBlock Style="{StaticResource Heading}" Text="Review folder name" />
-                        <TextBox Text="{Binding ReviewFolder, UpdateSourceTrigger=PropertyChanged}" Width="200" HorizontalAlignment="Left" Margin="0,0,0,14" />
-                        <CheckBox IsChecked="{Binding BacklogEnabled}" Content="Sort screenshots taken while the app was not running" />
-                        <CheckBox IsChecked="{Binding RenameMovedFiles}" Content="Rename screenshots I move to another folder" />
-                        <CheckBox IsChecked="{Binding NotificationsEnabled}" Content="Show a notification after each batch" />
-                        <CheckBox x:Name="StartWithWindowsBox" Content="Start with Windows" Margin="0" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Sorted screenshots go under" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="Folders such as Games and Chat are created here." />
+                                <DockPanel Margin="0,0,0,14">
+                                    <Button DockPanel.Dock="Right" Content="Browse..." Click="OnBrowseSortedRoot" Margin="8,0,0,0" MinWidth="88" />
+                                    <TextBox x:Name="SortedRootBox" Text="{Binding SortedRoot, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Review folder name" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="Screenshots it could not place with confidence wait here for you." />
+                                <TextBox Text="{Binding ReviewFolder, UpdateSourceTrigger=PropertyChanged}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <CheckBox IsChecked="{Binding BacklogEnabled}" Margin="0,0,0,12"
+                                          AutomationProperties.Name="Sort screenshots taken while the app was not running">
+                                    <StackPanel>
+                                        <TextBlock Text="Sort screenshots taken while the app was not running" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="This includes screenshots already in the watch folders. They are sorted by what they show." />
+                                    </StackPanel>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding RenameMovedFiles}" Margin="0,0,0,12"
+                                          AutomationProperties.Name="Rename screenshots I move to another folder">
+                                    <StackPanel>
+                                        <TextBlock Text="Rename screenshots I move to another folder" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="The new name matches the folder. A name you chose yourself is kept." />
+                                    </StackPanel>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding NotificationsEnabled}" Margin="0,0,0,12"
+                                          AutomationProperties.Name="Show a notification after each batch">
+                                    <StackPanel>
+                                        <TextBlock Text="Show a notification after each batch" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="Says how many were sorted and how many need review." />
+                                    </StackPanel>
+                                </CheckBox>
+                                <CheckBox x:Name="StartWithWindowsBox" AutomationProperties.Name="Start with Windows">
+                                    <StackPanel>
+                                        <TextBlock Text="Start with Windows" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="Otherwise screenshots wait until you start the app." />
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Grid>
+                </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="App rules">
-                <DockPanel Margin="12">
-                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}"
-                               Text="Which folder each focused app goes to. The first matching row wins. Separate several values with commas. Use @browser in Processes for any browser listed below. Target is a folder such as Code or Chat/Discord." />
-                    <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-                        <TextBlock Style="{StaticResource Heading}" Text="Browser processes" />
-                        <TextBox Text="{Binding BrowserProcesses, UpdateSourceTrigger=PropertyChanged}" />
-                    </StackPanel>
-                    <StackPanel DockPanel.Dock="Right" Margin="8,0,0,0">
-                        <Button Content="Move up" Click="OnMoveRuleUp" Margin="0,0,0,6" />
-                        <Button Content="Move down" Click="OnMoveRuleDown" />
-                    </StackPanel>
-                    <DataGrid x:Name="RulesGrid" ItemsSource="{Binding Rules}">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Processes" Binding="{Binding Processes}" Width="2*" />
-                            <DataGridTextColumn Header="Title contains" Binding="{Binding TitleContains}" Width="1.5*" />
-                            <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="1.2*" />
-                            <DataGridTextColumn Header="File name" Binding="{Binding Name}" Width="*" />
-                        </DataGrid.Columns>
-                    </DataGrid>
+            <TabItem Header="App rules" Tag="&#xE71D;">
+                <DockPanel Margin="16,16,24,8">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource PageTitle}" Text="App rules" />
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,16"
+                               Text="Which folder each focused app goes to. The first matching row wins, so order matters." />
+
+                    <Border DockPanel.Dock="Bottom" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Heading}" Text="Browser processes" />
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="Use @browser in a rule's Processes to mean any of these." />
+                            <TextBox Text="{Binding BrowserProcesses, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                       Text="Separate several values with commas. Target is a folder such as Code or Chat/Discord." />
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Content="Add rule" Click="OnAddRule" Margin="0,0,8,0" MinWidth="88" />
+                                <Button Content="Remove" Click="OnRemoveRule" Margin="0,0,8,0" MinWidth="88" />
+                                <Button Content="Move up" Click="OnMoveRuleUp" Margin="0,0,8,0" MinWidth="88" />
+                                <Button Content="Move down" Click="OnMoveRuleDown" MinWidth="88" />
+                            </StackPanel>
+                            <DataGrid x:Name="RulesGrid" ItemsSource="{Binding Rules}" AutoGenerateColumns="False" HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal" CanUserAddRows="False" SelectionMode="Single">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Processes" Binding="{Binding Processes}" Width="2*" />
+                                    <DataGridTextColumn Header="Title contains" Binding="{Binding TitleContains}" Width="1.5*" />
+                                    <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="1.2*" />
+                                    <DataGridTextColumn Header="File name" Binding="{Binding Name}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Border>
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="Games">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="2*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Style="{StaticResource Hint}"
-                               Text="Aliases name a game whose exe or folder differs from its title, for example StarRail and Honkai Star Rail." />
-                    <DataGrid x:Name="AliasesGrid" Grid.Row="1" ItemsSource="{Binding GameAliases}" Margin="0,0,0,14">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Exe, folder or title" Binding="{Binding Key}" Width="*" />
-                            <DataGridTextColumn Header="Game title" Binding="{Binding Title}" Width="*" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                    <TextBlock Grid.Row="2" Style="{StaticResource Hint}"
-                               Text="Extra known games, one per line. Installed Steam and Epic games and your Games folders are already known." />
-                    <TextBox Grid.Row="3" Text="{Binding ExtraGameTitles, UpdateSourceTrigger=PropertyChanged}"
-                             AcceptsReturn="True" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" />
-                </Grid>
-            </TabItem>
+            <TabItem Header="Games" Tag="&#xE7FC;">
+                <DockPanel Margin="16,16,24,8">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource PageTitle}" Text="Games" />
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,16"
+                               Text="Installed Steam and Epic games and your Games folders are already known. Add only what it misses." />
 
-            <TabItem Header="Vision and idle">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid Margin="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="20" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Style="{StaticResource Heading}" Text="LM Studio URL" />
-                            <TextBox Text="{Binding LmStudioUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
-                            <TextBlock Style="{StaticResource Heading}" Text="Model" />
-                            <TextBox Text="{Binding LmStudioModel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,18" />
-
-                            <TextBlock Style="{StaticResource Heading}" Text="Run the vision model only when" />
-                            <DockPanel Margin="0,0,0,8">
-                                <TextBox DockPanel.Dock="Right" Width="64" Text="{Binding NoInputMinutes, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="No input for this many minutes" VerticalAlignment="Center" />
-                            </DockPanel>
-                            <DockPanel Margin="0,0,0,8">
-                                <TextBox DockPanel.Dock="Right" Width="64" Text="{Binding MaxGpuUtilPercent, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="GPU load at or below this percent" VerticalAlignment="Center" />
-                            </DockPanel>
-                            <CheckBox IsChecked="{Binding SkipWhenFullscreen}" Content="No fullscreen app in focus" Margin="0,0,0,18" />
-
-                            <TextBlock Style="{StaticResource Heading}" Text="Confidence, from 0 to 1" />
-                            <DockPanel Margin="0,0,0,8">
-                                <TextBox DockPanel.Dock="Right" Width="64" Text="{Binding VisionConfidence, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Vision answers below this go to review" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <DockPanel Margin="0,0,0,8">
-                                <TextBox DockPanel.Dock="Right" Width="64" Text="{Binding ExampleSimilarity, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Similarity an example needs to count" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <DockPanel>
-                                <TextBox DockPanel.Dock="Right" Width="64" Text="{Binding ExampleAgreement, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Share of examples that must agree" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
+                    <Border DockPanel.Dock="Bottom" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Heading}" Text="Extra known games" />
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="One title per line." />
+                            <TextBox Text="{Binding ExtraGameTitles, UpdateSourceTrigger=PropertyChanged}" Height="96"
+                                     AcceptsReturn="True" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" />
                         </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Style="{StaticResource Heading}" Text="Folder for each category" />
-                            <DataGrid x:Name="CategoriesGrid" ItemsSource="{Binding Categories}" CanUserAddRows="False" CanUserDeleteRows="False">
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}" Text="Aliases" />
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                       Text="Name a game whose exe or folder differs from its title, for example StarRail and Honkai Star Rail." />
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Content="Add alias" Click="OnAddAlias" Margin="0,0,8,0" MinWidth="88" />
+                                <Button Content="Remove" Click="OnRemoveAlias" MinWidth="88" />
+                            </StackPanel>
+                            <DataGrid x:Name="AliasesGrid" ItemsSource="{Binding GameAliases}" AutoGenerateColumns="False" HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal" CanUserAddRows="False" SelectionMode="Single">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Category" Binding="{Binding Key}" IsReadOnly="True" Width="*" />
-                                    <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="*" />
+                                    <DataGridTextColumn Header="Exe, folder or title" Binding="{Binding Key}" Width="*" />
+                                    <DataGridTextColumn Header="Game title" Binding="{Binding Title}" Width="*" />
                                 </DataGrid.Columns>
                             </DataGrid>
-                        </StackPanel>
-                    </Grid>
+                        </DockPanel>
+                    </Border>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Vision model" Tag="&#xE890;">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,16,24,8">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Vision model" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,16"
+                                   Text="A model in LM Studio looks at screenshots that the rules and examples could not place." />
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="LM Studio URL" Margin="0,0,0,6" />
+                                <TextBox Text="{Binding LmStudioUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,14" />
+                                <TextBlock Style="{StaticResource Heading}" Text="Model" Margin="0,0,0,6" />
+                                <TextBox Text="{Binding LmStudioModel, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Run the model only when" Margin="0,0,0,10" />
+                                <DockPanel Margin="0,0,0,8">
+                                    <TextBox DockPanel.Dock="Right" Width="80" Text="{Binding NoInputMinutes, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="No input for this many minutes" />
+                                    <TextBlock Text="No input for this many minutes" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <DockPanel Margin="0,0,0,12">
+                                    <TextBox DockPanel.Dock="Right" Width="80" Text="{Binding MaxGpuUtilPercent, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="GPU load at or below this percent" />
+                                    <TextBlock Text="GPU load at or below this percent" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <CheckBox IsChecked="{Binding SkipWhenFullscreen}" Content="No fullscreen app in focus" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Folder for each category" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="Where the model's answers end up." />
+                                <DataGrid x:Name="CategoriesGrid" ItemsSource="{Binding Categories}" AutoGenerateColumns="False" HeadersVisibility="Column"
+                                          GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Category" Binding="{Binding Key}" IsReadOnly="True" Width="*" />
+                                        <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <Expander Header="Fine-tuning" Margin="0,0,0,10">
+                            <StackPanel Margin="0,8,0,0">
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="Values from 0 to 1. The defaults suit most people." />
+                                <DockPanel Margin="0,0,0,8">
+                                    <TextBox DockPanel.Dock="Right" Width="80" Text="{Binding VisionConfidence, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="Vision answers below this go to review" />
+                                    <TextBlock Text="Vision answers below this go to review" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                </DockPanel>
+                                <DockPanel Margin="0,0,0,8">
+                                    <TextBox DockPanel.Dock="Right" Width="80" Text="{Binding ExampleSimilarity, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="Similarity an example needs to count" />
+                                    <TextBlock Text="Similarity an example needs to count" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                </DockPanel>
+                                <DockPanel>
+                                    <TextBox DockPanel.Dock="Right" Width="80" Text="{Binding ExampleAgreement, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="Share of examples that must agree" />
+                                    <TextBlock Text="Share of examples that must agree" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
                 </ScrollViewer>
             </TabItem>
         </TabControl>

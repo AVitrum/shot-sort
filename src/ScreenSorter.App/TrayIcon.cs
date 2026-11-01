@@ -10,8 +10,8 @@ using Forms = System.Windows.Forms;
 namespace ScreenSorter.App;
 
 /// <summary>
-/// Notification-area icon with the tray menu (pause/resume, sort now, open folders, settings, exit)
-/// and batch-summary balloons. Must be created on the UI thread.
+/// Notification-area icon with the tray menu (pause/resume, sort now, open folders, guide, settings, exit)
+/// and batch-summary balloons. Double-clicking the icon opens the settings. Must be created on the UI thread.
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
@@ -41,6 +41,7 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add("Open review folder", null, (_, _) => OpenFolder(ReviewFolder));
         menu.Items.Add("Open screenshots folder", null, (_, _) => OpenFolder(PathsOptions.Expand(_paths.SortedRoot)));
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("How it works", null, (_, _) => GuideRequested?.Invoke(this, EventArgs.Empty));
         menu.Items.Add("Settings...", null, (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty));
         menu.Items.Add("Exit", null, (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty));
 
@@ -53,6 +54,7 @@ public sealed class TrayIcon : IDisposable
             Visible = true,
         };
         _icon.BalloonTipClicked += (_, _) => OpenFolder(ReviewFolder);
+        _icon.DoubleClick += (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 
         _activity.StateChanged += OnStateChanged;
         _activity.BatchCompleted += OnBatchCompleted;
@@ -61,8 +63,11 @@ public sealed class TrayIcon : IDisposable
     /// <summary>Raised on the UI thread when the user picks "Exit".</summary>
     public event EventHandler? ExitRequested;
 
-    /// <summary>Raised on the UI thread when the user picks "Settings...".</summary>
+    /// <summary>Raised on the UI thread when the user picks "Settings..." or double-clicks the icon.</summary>
     public event EventHandler? SettingsRequested;
+
+    /// <summary>Raised on the UI thread when the user picks "How it works".</summary>
+    public event EventHandler? GuideRequested;
 
     private string ReviewFolder => Path.Combine(PathsOptions.Expand(_paths.SortedRoot), _paths.ReviewFolder);
 

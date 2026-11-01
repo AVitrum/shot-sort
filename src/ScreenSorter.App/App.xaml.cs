@@ -30,6 +30,7 @@ public partial class App : Application
     private IHost? _host;
     private TrayIcon? _tray;
     private SettingsWindow? _settings;
+    private GuideWindow? _guide;
 
     /// <summary>Starts the host and the tray icon; exits if another instance keeps running.</summary>
     /// <param name="e">Command-line arguments; <c>--Section:Key=value</c> overrides configuration.</param>
@@ -67,7 +68,9 @@ public partial class App : Application
             _tray = _host.Services.GetRequiredService<TrayIcon>();
             _tray.ExitRequested += async (_, _) => await ExitAsync(restart: false);
             _tray.SettingsRequested += (_, _) => OpenSettings();
+            _tray.GuideRequested += (_, _) => OpenGuide();
 
+            ShowGuideOnFirstRun();
             if (builder.Configuration.GetValue<bool>("Ui:OpenSettingsOnStart"))
                 OpenSettings();
         }
@@ -98,6 +101,42 @@ public partial class App : Application
         return true;
     }
 
+    private void ShowGuideOnFirstRun()
+    {
+        var paths = _host!.Services.GetRequiredService<IOptions<PathsOptions>>().Value;
+        if (GuideMarker.IsSet(paths))
+            return;
+
+        OpenGuide();
+        try
+        {
+            GuideMarker.Set(paths);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _host.Services.GetRequiredService<ILogger<App>>().LogWarning(ex, "Could not record that the guide was shown");
+        }
+    }
+
+    private void OpenGuide()
+    {
+        if (_guide is not null)
+        {
+            _guide.Activate();
+            return;
+        }
+
+        var services = _host!.Services;
+        var paths = services.GetRequiredService<IOptions<PathsOptions>>().Value;
+        _guide = new GuideWindow(
+            paths.WatchFolders.Select(PathsOptions.Expand),
+            paths.ReviewFolder,
+            services.GetRequiredService<IOptions<BacklogOptions>>().Value.Enabled);
+        _guide.Closed += (_, _) => _guide = null;
+        _guide.SettingsRequested += (_, _) => OpenSettings();
+        _guide.Show();
+    }
+
     private void OpenSettings()
     {
         if (_settings is not null)
@@ -121,6 +160,7 @@ public partial class App : Application
         var wasEnabled = _runAtLogin.IsEnabled;
         _settings = new SettingsWindow(model, wasEnabled);
         _settings.Closed += (_, _) => _settings = null;
+        _settings.GuideRequested += (_, _) => OpenGuide();
         _settings.SaveRequested += async (_, _) => await SaveSettingsAsync(model, wasEnabled);
         _settings.Show();
     }

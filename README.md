@@ -58,7 +58,9 @@ In LM Studio, download the model named by `LmStudio:Model` in `src/ScreenSorter.
 dotnet run --project src/ScreenSorter.App
 ```
 
-A tray icon appears; it may be hidden under the **^** arrow in the taskbar. Right-click it for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, Settings and Exit.
+A tray icon appears; it may be hidden under the **^** arrow in the taskbar. Right-click it for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, How it works, Settings and Exit. Double-click it for Settings.
+
+A short guide opens the first time the app starts. To see it again, pick **How it works** from the tray menu or the settings window.
 
 On first run the app downloads the CLIP image model (352 MB) from Hugging Face and checks it against a pinned SHA-256.
 
@@ -75,13 +77,15 @@ Screenshots taken while the app was not running have no record of the focused wi
 
 Open **Settings** from the tray menu to change the watch folders, app rules, game aliases, vision categories, thresholds, idle conditions and the LM Studio address, and to turn on **Start with Windows**. Saving restarts the app. Your values go to `%LOCALAPPDATA%\ScreenSorter\settings.json`, layered over the defaults in `src/ScreenSorter.App/appsettings.json`, so a rule you delete stays deleted.
 
-If a game's exe name differs from its title, add an alias on the **Games** tab: `StarRail` and `Honkai Star Rail`.
+The windows follow your Windows light or dark mode and accent color.
+
+If a game's exe name differs from its title, add an alias on the **Games** page: `StarRail` and `Honkai Star Rail`.
 
 Any setting can also be overridden for one run on the command line with `--Section:Key=value`.
 
 ## Your data
 
-Data stays in `%LOCALAPPDATA%\ScreenSorter`: your settings, the decision log (SQLite), logs and the CLIP model. The decision log records file paths and the focused app's name and window title. Qdrant's data stays in a local Docker volume, reachable only from this machine.
+Data stays in `%LOCALAPPDATA%\ScreenSorter`: your settings, a marker that the guide was shown, the decision log (SQLite), logs and the CLIP model. The decision log records file paths and the focused app's name and window title. Qdrant's data stays in a local Docker volume, reachable only from this machine.
 
 The app reads window titles, process paths, and Steam and Epic install data. Its only network traffic outside this machine is the one-time model download.
 
