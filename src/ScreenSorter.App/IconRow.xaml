@@ -1,0 +1,21 @@
+<UserControl x:Class="ScreenSorter.App.IconRow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Margin="0,0,0,12"
+             Focusable="False">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Width="36" Height="36" CornerRadius="18" VerticalAlignment="Top" Margin="0,2,14,0"
+                Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+            <TextBlock x:Name="GlyphBlock" Style="{StaticResource Icon}" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock x:Name="TitleBlock" Style="{StaticResource Heading}" />
+            <TextBlock x:Name="SentenceBlock" Style="{StaticResource Hint}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

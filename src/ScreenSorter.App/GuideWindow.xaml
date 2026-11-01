@@ -1,0 +1,88 @@
+<Window x:Class="ScreenSorter.App.GuideWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ScreenSorter.App"
+        Title="How ScreenSorter works"
+        Icon="/Assets/app.ico"
+        Width="640" Height="540"
+        ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True">
+    <DockPanel>
+        <DockPanel DockPanel.Dock="Bottom" Margin="28,0,28,20" LastChildFill="True">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="SkipButton" Content="Skip" Click="OnClose" Margin="0,0,8,0" MinWidth="88" />
+                <Button x:Name="SettingsButton" Content="Open settings" Click="OnOpenSettings" Margin="0,0,8,0" MinWidth="88" />
+                <Button x:Name="BackButton" Content="Back" Click="OnBack" Margin="0,0,8,0" MinWidth="88" />
+                <Button x:Name="NextButton" Content="Next" Click="OnNext" IsDefault="True" MinWidth="88"
+                        Style="{DynamicResource AccentButtonStyle}" />
+            </StackPanel>
+            <TextBlock x:Name="StepText" Style="{StaticResource Hint}" VerticalAlignment="Center" />
+        </DockPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="28,24,28,12">
+            <StackPanel x:Name="WelcomePage">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Screenshots, sorted for you" />
+                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,18"
+                           Text="Take screenshots as usual. ScreenSorter runs in the background, works out which game or app each one came from, and moves it into a folder for it." />
+                <Border Style="{StaticResource Card}">
+                    <TextBlock FontFamily="Cascadia Mono, Consolas" xml:space="preserve">Screenshots
+├─ Games/Deadlock/Deadlock_2026-11-01_21-04-12.png
+├─ Chat/Discord/
+├─ Code/
+└─ _Review/   screenshots it could not place</TextBlock>
+                </Border>
+                <local:IconRow x:Name="WatchingRow" Margin="0,8,0,12"
+                                        Glyph="&#xE8B7;" Title="Watching" />
+                <local:IconRow x:Name="BacklogRow"
+                                        Glyph="&#xE7BA;" Title="Screenshots already there get sorted too"
+                                        Text="To leave them where they are, turn off &#x201C;Sort screenshots taken while the app was not running&#x201D; in Settings." />
+            </StackPanel>
+
+            <StackPanel x:Name="DecidePage">
+                <TextBlock Style="{StaticResource PageTitle}" Text="How it picks a folder" />
+                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,18"
+                           Text="Three checks, quickest first. Your screenshots stay on this PC." />
+                <local:IconRow Glyph="&#xE7F4;" Title="1. The app in focus"
+                                        Text="Rules and your list of games match the window you were using to a folder. This is instant." />
+                <local:IconRow Glyph="&#xE8FD;" Title="2. Examples you taught it"
+                                        Text="The screenshot is compared with ones you already placed yourself." />
+                <local:IconRow Glyph="&#xE890;" Title="3. A vision model on your PC"
+                                        Text="If that is not enough, the file waits until your PC is idle, and then the model looks at it." />
+                <local:IconRow x:Name="ReviewRow" Glyph="&#xE897;" Title="Still not sure?" />
+            </StackPanel>
+
+            <StackPanel x:Name="TeachPage">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Teach it by moving files" />
+                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,18"
+                           Text="Wrong folder? Drag the screenshot into the right one. That is all the training it needs." />
+                <local:IconRow Glyph="&#xE8DE;" Title="It learns"
+                                        Text="A few seconds later the screenshot counts as an example of that folder, so similar ones go there too." />
+                <local:IconRow Glyph="&#xE8AC;" Title="It renames"
+                                        Text="The file gets a name that matches its new folder. A name you chose yourself is kept. You can turn this off in Settings." />
+                <local:IconRow x:Name="ForgetRow" Glyph="&#xE74D;" Title="It forgets" />
+            </StackPanel>
+
+            <StackPanel x:Name="TrayPage">
+                <TextBlock Style="{StaticResource PageTitle}" Text="Find it in the tray" />
+                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,18"
+                           Text="Right-click the ScreenSorter icon near the clock. It may be hidden under the ^ arrow. Double-click it for Settings." />
+                <local:IconRow Glyph="&#xE769;" Title="Pause"
+                                        Text="Holds sorting for a while. New screenshots wait in line until you resume." />
+                <local:IconRow Glyph="&#xE895;" Title="Sort now"
+                                        Text="Handles waiting files right away instead of waiting for your PC to be idle." />
+                <local:IconRow Glyph="&#xE8B7;" Title="Open review folder"
+                                        Text="Shows the screenshots that need a decision from you." />
+                <Border Style="{StaticResource Card}" Margin="0,6,0,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Heading}" Text="Two optional helpers" Margin="0,0,0,2" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="App rules work on their own. Learning from examples needs Qdrant running in Docker, and the vision model needs LM Studio with its server on. ScreenSorter does not start them for you." />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
