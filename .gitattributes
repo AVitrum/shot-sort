@@ -1,0 +1,21 @@
+# Normalize line endings: LF in the repository, native in working copies.
+* text=auto
+
+*.cs      text diff=csharp
+*.csproj  text
+*.slnx    text
+*.props   text
+*.xaml    text
+*.json    text
+*.md      text diff=markdown
+*.yml     text
+
+# Hooks must keep LF or sh cannot run them.
+.githooks/* text eol=lf
+*.sh        text eol=lf
+
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.ico     binary
+*.onnx    binary

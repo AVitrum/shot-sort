@@ -1,0 +1,38 @@
+#!/bin/sh
+# Blocks commits that contain agent files, secrets, personal data, screenshots or very large files.
+# Only staged content is checked. To override a false alarm on purpose: git commit --no-verify
+. "$(git rev-parse --show-toplevel)/.githooks/safety-rules.sh"
+
+failed=0
+report() {
+    echo "BLOCKED: $1: $2" >&2
+    failed=1
+}
+
+staged=$(mktemp)
+trap 'rm -f "$staged"' EXIT
+git diff --cached --name-only --diff-filter=ACMR > "$staged"
+
+while IFS= read -r path; do
+    [ -n "$path" ] || continue
+
+    problem=$(path_problem "$path")
+    [ -z "$problem" ] || report "$path" "$problem"
+
+    size=$(git cat-file -s ":$path" 2>/dev/null || echo 0)
+    [ "$size" -le "$MAX_FILE_BYTES" ] || report "$path" "$size bytes, limit is $MAX_FILE_BYTES"
+
+    # The hooks describe the patterns they look for; everything else is scanned.
+    case "$path" in
+        .githooks/*) continue ;;
+    esac
+    git diff --cached --no-ext-diff -U0 -- "$path" | grep '^+' | grep -v '^+++' | content_problem | while IFS= read -r found; do
+        echo "BLOCKED: $path: contains $found" >&2
+        echo x
+    done | grep -q x && failed=1
+done < "$staged"
+
+if [ "$failed" -ne 0 ]; then
+    echo "Commit stopped by .githooks/pre-commit. Fix the files above, or use --no-verify if it is a false alarm." >&2
+    exit 1
+fi
