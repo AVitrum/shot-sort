@@ -245,6 +245,22 @@ public class IdleDetectorTests
 public class VisionQueueTests
 {
     [Fact]
+    public async Task NewSnips_GoAheadOfBacklog_InArrivalOrder()
+    {
+        var q = new VisionQueue();
+        q.Enqueue(new VisionWorkItem("old1", null));
+        q.Enqueue(new VisionWorkItem("new1", Focus("a.exe")));
+        q.Enqueue(new VisionWorkItem("old2", null));
+        q.Enqueue(new VisionWorkItem("new2", Focus("b.exe")));
+
+        var order = new List<string>();
+        for (var i = 0; i < 4; i++)
+            order.Add((await q.DequeueAsync(CancellationToken.None)).Path);
+
+        Assert.Equal(["new1", "new2", "old1", "old2"], order);
+    }
+
+    [Fact]
     public async Task Requeue_PutsItemBackAtFront()
     {
         var q = new VisionQueue();

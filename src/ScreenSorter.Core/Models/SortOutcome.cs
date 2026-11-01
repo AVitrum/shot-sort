@@ -10,8 +10,8 @@ public enum SortOutcomeKind
     Review,
 
     /// <summary>
-    /// Left in place: no focus history covers its capture time (backlog) and no image-based
-    /// stage is available yet.
+    /// Left in place: no focus history covers its capture time (backlog) and
+    /// <see cref="Configuration.BacklogOptions.Enabled"/> is off.
     /// </summary>
     Deferred,
 

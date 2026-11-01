@@ -179,7 +179,7 @@ public sealed class VisionWorkerEjectTests : IDisposable
             new RulesEngine(rules, new GameDetector(rules, new FixedTitles(), new FixedCatalog())),
             new ExampleClassifier(new FakeEmbedder(), new FakeExampleStore(), Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance),
             new WicImageInspector(), _vision, new VisionMapper(lmStudio, rules, thresholds, paths, new FixedCatalog()),
-            new SqliteDecisionLog(paths), paths, thresholds, TimeProvider.System, NullLogger<SortPipeline>.Instance);
+            new SqliteDecisionLog(paths), paths, thresholds, Opt(new BacklogOptions()), TimeProvider.System, NullLogger<SortPipeline>.Instance);
         _worker = new VisionWorker(_queue, pipeline, _vision,
             new IdleDetector(_activity, Opt(new IdleOptions { NoInputMinutes = 5, MaxGpuUtilPercent = 20 })),
             _sort, Opt(new IdleOptions { CheckIntervalSeconds = 5 }), lmStudio, NullLogger<VisionWorker>.Instance);
@@ -235,11 +235,12 @@ public sealed class VisionWorkerEjectTests : IDisposable
     {
         _activity.SinceInput = TimeSpan.Zero;
         await _worker.StartAsync(CancellationToken.None);
-        var before = _vision.Releases;
+        // The worker starts on the thread pool; stopping before it runs would leave nothing to eject.
+        await WaitForAsync(() => _activity.Checked);
 
         await _worker.StopAsync(CancellationToken.None);
 
-        Assert.Equal(before + 1, _vision.Releases);
+        Assert.Equal(1, _vision.Releases);
     }
 
     private static async Task WaitForAsync(Func<bool> condition)
@@ -256,7 +257,14 @@ public sealed class VisionWorkerEjectTests : IDisposable
     {
         public TimeSpan SinceInput { get; set; } = TimeSpan.FromHours(1);
 
-        public TimeSpan TimeSinceLastInput() => SinceInput;
+        public volatile bool Checked;
+
+        public TimeSpan TimeSinceLastInput()
+        {
+            Checked = true;
+            return SinceInput;
+        }
+
         public bool IsFullscreenAppFocused() => false;
         public int? GpuUtilizationPercent() => 0;
     }

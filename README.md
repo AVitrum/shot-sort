@@ -32,7 +32,7 @@ Each new screenshot goes through these stages:
 
 ## Teaching it
 
-Drag a screenshot into the right folder. A few seconds later it counts as an example of that folder. Moving a file into `_Review` removes the example. Renaming a folder relabels the files inside it.
+Drag a screenshot into the right folder. A few seconds later it counts as an example of that folder and is renamed to match, for example `Screenshot 2026-11-01 210412.png` becomes `Deadlock_2026-11-01_21-04-12.png`. A name you chose yourself is kept. Moving a file into `_Review` removes the example. Renaming a folder relabels the files inside it.
 
 ## Requirements
 
@@ -58,33 +58,38 @@ In LM Studio, download the model named by `LmStudio:Model` in `src/ScreenSorter.
 dotnet run --project src/ScreenSorter.App
 ```
 
-A tray icon appears; it may be hidden under the **^** arrow in the taskbar. Right-click it for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, and Exit.
+A tray icon appears; it may be hidden under the **^** arrow in the taskbar. Right-click it for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, Settings and Exit.
 
 On first run the app downloads the CLIP image model (352 MB) from Hugging Face and checks it against a pinned SHA-256.
 
-> **Note:** this app moves and renames files in your screenshots folder. To see how it behaves first, create an empty test folder and point it there:
+> **Note:** this app moves and renames files in your screenshots folder, **including screenshots that are already there**: those are sorted by image content when you start it. To see how it behaves first, create an empty test folder and point it there:
 > `dotnet run --project src/ScreenSorter.App -- --Paths:WatchFolders:0=C:\Temp\shots --Paths:SortedRoot=C:\Temp\shots`
+>
+> To keep existing screenshots where they are, add `--Backlog:Enabled=false`, or untick the option under Settings.
 
-## Configuration
+## Existing screenshots
 
-All settings are in `src/ScreenSorter.App/appsettings.json`: watch folders, rules, game aliases, thresholds, idle conditions, and the LM Studio and Qdrant addresses. Any setting can also be overridden on the command line with `--Section:Key=value`.
+Screenshots taken while the app was not running have no record of the focused window, so only their image content counts. Blank images go to `_Review`, files that closely match your examples are sorted right away, and the rest wait for the vision model behind any new screenshots. The model handles them while the PC is idle and stops as soon as you come back.
 
-If a game's exe name differs from its title, add an alias:
+## Settings
 
-```json
-"GameAliases": { "StarRail": "Honkai Star Rail" }
-```
+Open **Settings** from the tray menu to change the watch folders, app rules, game aliases, vision categories, thresholds, idle conditions and the LM Studio address, and to turn on **Start with Windows**. Saving restarts the app. Your values go to `%LOCALAPPDATA%\ScreenSorter\settings.json`, layered over the defaults in `src/ScreenSorter.App/appsettings.json`, so a rule you delete stays deleted.
+
+If a game's exe name differs from its title, add an alias on the **Games** tab: `StarRail` and `Honkai Star Rail`.
+
+Any setting can also be overridden for one run on the command line with `--Section:Key=value`.
 
 ## Your data
 
-Data stays in `%LOCALAPPDATA%\ScreenSorter`: the decision log (SQLite), logs and the CLIP model. The decision log records file paths and the focused app's name and window title. Qdrant's data stays in a local Docker volume, reachable only from this machine.
+Data stays in `%LOCALAPPDATA%\ScreenSorter`: your settings, the decision log (SQLite), logs and the CLIP model. The decision log records file paths and the focused app's name and window title. Qdrant's data stays in a local Docker volume, reachable only from this machine.
 
 The app reads window titles, process paths, and Steam and Epic install data. Its only network traffic outside this machine is the one-time model download.
 
 ## Current limits
 
-- Screenshots taken while the app was not running stay where they are, unless you sort them by hand. Importing them automatically is planned.
-- There is no settings window or start-with-Windows yet. Start the app and LM Studio's server yourself after a reboot.
+- The app does not start LM Studio's server or Qdrant. After a reboot, files that need them wait until they are running.
+- There is no undo. Every move is recorded in the decision log, and you can drag a file back by hand.
+- The vision model can pick the wrong game from your known games. Moving the file to the right folder teaches the app.
 - Images only, no videos.
 
 ## Development

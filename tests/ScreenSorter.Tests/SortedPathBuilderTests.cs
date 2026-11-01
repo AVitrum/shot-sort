@@ -43,6 +43,15 @@ public class SortedPathBuilderTests
     [InlineData("Screenshot 2026-10-31 210412.png", true)]
     [InlineData("Screenshot 2026-10-31 210412 (2).png", true)]
     [InlineData("IMG_0001.png", false)]
+    [InlineData("Screenshot 2026-10-31 210412 boss fight.png", false)]
+    [InlineData("Deadlock_2026-10-31_21-04-12.png", true)]
+    [InlineData("Zenless Zone Zero_2026-10-31_21-04-12_2.png", true)]
+    [InlineData("Deadlock_2026-10-31_21-04-12 - Copy.png", true)]
+    [InlineData("Deadlock_2026-10-31_21-04-12 - Copy (2).png", true)]
+    [InlineData("Screenshot 2026-10-31 210412 - Copy.png", true)]
+    [InlineData("Deadlock_2026-10-31_21-04-12 final.png", false)]
+    [InlineData("Deadlock_2026-13-31_21-04-12.png", false)]
+    [InlineData("_2026-10-31_21-04-12.png", false)]
     public void CaptureTime_FromSnippingToolName(string name, bool parsed)
     {
         var t = CaptureTime.FromFileName(name);

@@ -46,6 +46,8 @@ public static class ServiceCollectionExtensions
         services.Configure<ClipOptions>(configuration.GetSection(ClipOptions.Section));
         services.Configure<QdrantOptions>(configuration.GetSection(QdrantOptions.Section));
         services.Configure<CorrectionsOptions>(configuration.GetSection(CorrectionsOptions.Section));
+        services.Configure<BacklogOptions>(configuration.GetSection(BacklogOptions.Section));
+        services.Configure<NotificationsOptions>(configuration.GetSection(NotificationsOptions.Section));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SortActivity>();

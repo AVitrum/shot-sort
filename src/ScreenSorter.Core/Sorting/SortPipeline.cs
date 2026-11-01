@@ -15,7 +15,8 @@ namespace ScreenSorter.Core.Sorting;
 /// (when idle): ask the vision model. Both end in the same move-rename-log step.
 /// </summary>
 /// <remarks>
-/// Files without focus history (backlog) are left in place as <see cref="SortOutcomeKind.Deferred"/>.
+/// Files without focus history (backlog) skip the rules and are judged by image content alone; with
+/// <see cref="BacklogOptions.Enabled"/> off they are left in place as <see cref="SortOutcomeKind.Deferred"/>.
 /// Files that neither rules nor examples can place, or where the two disagree, stay in place and
 /// are returned as <see cref="SortOutcomeKind.Queued"/> for the vision queue.
 /// </remarks>
@@ -30,6 +31,7 @@ public sealed class SortPipeline(
     IDecisionLog log,
     IOptions<PathsOptions> paths,
     IOptions<ThresholdsOptions> thresholds,
+    IOptions<BacklogOptions> backlog,
     TimeProvider time,
     ILogger<SortPipeline> logger)
 {
@@ -51,7 +53,7 @@ public sealed class SortPipeline(
 
             var created = store.GetCreationTime(path);
             var snapshot = focus.GetFocusAt(created);
-            if (snapshot is null)
+            if (snapshot is null && !backlog.Value.Enabled)
             {
                 logger.LogDebug("Deferred {Path}: no focus history at {Created}", path, created);
                 return new SortOutcome(SortOutcomeKind.Deferred, path);
@@ -60,7 +62,7 @@ public sealed class SortPipeline(
             if (IsBlank(path))
                 return await ActAsync(path, Classification.Review(_paths.ReviewFolder, DecisionStage.ImageCheck), snapshot, ct);
 
-            var rule = rules.Classify(snapshot);
+            var rule = snapshot is null ? null : rules.Classify(snapshot);
             var example = await TryExamplesAsync(path, ct);
             if (rule is not null && (example is null || SameFolder(rule, example)))
                 return await ActAsync(path, rule, snapshot, ct);
@@ -69,7 +71,7 @@ public sealed class SortPipeline(
 
             // Focus is only a hint: a region snip can show a window that was not focused. On conflict the model decides.
             logger.LogInformation("Queued {Path} for the vision model ({Process}; rule {Rule}, examples {Example})",
-                path, snapshot.ProcessName, rule?.Category, example?.Category);
+                path, snapshot?.ProcessName ?? "backlog", rule?.Category, example?.Category);
             return new SortOutcome(SortOutcomeKind.Queued, path, Focus: snapshot);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

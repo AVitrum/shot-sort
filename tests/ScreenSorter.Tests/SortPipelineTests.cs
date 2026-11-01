@@ -22,6 +22,7 @@ public sealed class SortPipelineTests : IDisposable
     private readonly FakeVision _vision = new();
     private readonly FakeEmbedder _embedder = new();
     private readonly FakeExampleStore _examples = new();
+    private readonly BacklogOptions _backlog = new();
     private readonly SortPipeline _pipeline;
 
     public SortPipelineTests()
@@ -43,7 +44,7 @@ public sealed class SortPipelineTests : IDisposable
         var examples = new ExampleClassifier(_embedder, _examples, Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
         _pipeline = new SortPipeline(store, _focus,
             new RulesEngine(rules, new GameDetector(rules, new NoTitles(), new FixedCatalog())), examples, new WicImageInspector(), _vision,
-            new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, TimeProvider.System,
+            new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, Opt(_backlog), TimeProvider.System,
             NullLogger<SortPipeline>.Instance);
     }
 
@@ -185,15 +186,65 @@ public sealed class SortPipelineTests : IDisposable
     }
 
     [Fact]
-    public async Task Process_BacklogFile_IsDeferredAndLeftInPlace()
+    public async Task Process_BacklogDisabled_IsDeferredAndLeftInPlace()
     {
-        var file = _temp.File("Screenshot 2026-10-10 121110.png");
-        File.SetCreationTimeUtc(file, DateTime.UtcNow.AddDays(-20));
+        _backlog.Enabled = false;
+        var file = BacklogFile();
 
         var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
 
         Assert.Equal(SortOutcomeKind.Deferred, outcome.Kind);
         Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Process_Backlog_NoExample_GoesToVisionQueueWithoutHint()
+    {
+        var file = BacklogFile();
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal((SortOutcomeKind.Queued, (FocusSnapshot?)null), (outcome.Kind, outcome.Focus));
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Process_Backlog_ConfidentExample_SortsWithoutTheModel()
+    {
+        _examples.Hits.Add(new ExampleHit(0.97, "Games", "Deadlock"));
+
+        var outcome = await _pipeline.ProcessAsync(BacklogFile(), CancellationToken.None);
+
+        Assert.Equal(Path.Combine(_temp.Path, "Games", "Deadlock", "Deadlock_2026-10-10_12-11-10.png"), outcome.TargetPath);
+        Assert.Null(_vision.LastHint);
+    }
+
+    [Fact]
+    public async Task Process_Backlog_BlackImage_GoesToReview()
+    {
+        var file = _temp.Solid("Screenshot 2026-10-10 121110.png", 0);
+        File.SetCreationTimeUtc(file, DateTime.UtcNow.AddDays(-20));
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal(Path.Combine(_temp.Path, "_Review", "Screenshot_2026-10-10_12-11-10.png"), outcome.TargetPath);
+    }
+
+    [Fact]
+    public async Task ProcessQueued_Backlog_SortsByTheModelsAnswer()
+    {
+        _vision.Result = new VisionResult("Game", "Hades", null, 0.95);
+
+        var outcome = await _pipeline.ProcessQueuedAsync(new VisionWorkItem(BacklogFile(), null), CancellationToken.None);
+
+        Assert.Equal(Path.Combine(_temp.Path, "Games", "Hades", "Hades_2026-10-10_12-11-10.png"), outcome.TargetPath);
+    }
+
+    private string BacklogFile()
+    {
+        var file = _temp.File("Screenshot 2026-10-10 121110.png");
+        File.SetCreationTimeUtc(file, DateTime.UtcNow.AddDays(-20));
+        return file;
     }
 
     [Fact]
