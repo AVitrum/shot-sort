@@ -1,21 +1,26 @@
 using Microsoft.Extensions.Options;
 using ScreenSorter.Core.Configuration;
 using ScreenSorter.Core.Models;
+using ScreenSorter.Core.Sorting;
 
 namespace ScreenSorter.Core.Rules;
 
-/// <summary>Recognizes games by their exe path under a known launcher library and resolves their title.</summary>
+/// <summary>
+/// Recognizes games by their exe path under a known launcher library or, for games installed elsewhere,
+/// by their exe name, and resolves their title.
+/// </summary>
 /// <remarks>
-/// Title order: alias map, launcher metadata (<see cref="IGameTitleProvider"/>), install folder name,
-/// window title. The alias map is applied again to the result. See D-004.
+/// Under a library, title order: alias map, launcher metadata (<see cref="IGameTitleProvider"/>), install folder
+/// name, window title; the alias map is applied again to the result (D-004). Elsewhere: alias of the exe name, or
+/// the <see cref="IGameCatalog"/> title with the same <see cref="SortedPathBuilder.MatchKey"/> (D-023).
 /// </remarks>
-public sealed class GameDetector(IOptions<RulesOptions> options, IGameTitleProvider titles)
+public sealed class GameDetector(IOptions<RulesOptions> options, IGameTitleProvider titles, IGameCatalog catalog)
 {
     private readonly RulesOptions _options = options.Value;
 
     /// <summary>Returns the game title if the focused exe is a game.</summary>
     /// <param name="focus">The focused window.</param>
-    /// <returns>The title, or <see langword="null"/> when the exe is not under a game library.</returns>
+    /// <returns>The title, or <see langword="null"/> when nothing marks the exe as a game.</returns>
     public string? TryDetect(FocusSnapshot focus)
     {
         var path = focus.ExePath;
@@ -24,15 +29,23 @@ public sealed class GameDetector(IOptions<RulesOptions> options, IGameTitleProvi
         if (_options.GameExcludeMarkers.Any(m => path.Contains(m, StringComparison.OrdinalIgnoreCase)))
             return null;
 
+        var exeName = Path.GetFileNameWithoutExtension(path);
         var folder = InstallFolder(path);
         if (folder is null)
-            return null;
+            return Alias(exeName) ?? KnownTitle(exeName);
 
-        var exeName = Path.GetFileNameWithoutExtension(path);
         var title = Alias(exeName) ?? Alias(folder) ?? titles.TryGetTitle(path) ?? folder;
         if (string.IsNullOrWhiteSpace(title))
             title = focus.WindowTitle;
         return Alias(title) ?? title;
+    }
+
+    // Whole-name match only: a partial one would turn any app that shares a word with a game into that game.
+    private string? KnownTitle(string exeName)
+    {
+        var key = SortedPathBuilder.MatchKey(exeName);
+        var title = catalog.GetTitles().FirstOrDefault(t => SortedPathBuilder.MatchKey(t) == key);
+        return title is null ? null : Alias(title) ?? title;
     }
 
     private string? InstallFolder(string path)

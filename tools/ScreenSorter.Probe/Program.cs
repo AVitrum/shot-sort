@@ -3,6 +3,7 @@
 // folder it would map to, and the timing.
 // --Probe:Mode=embed: embeds every image under a folder with CLIP and prints each image's nearest neighbours, to
 // check Thresholds:ExampleSimilarity. Downloads the CLIP model if it is missing.
+// --Probe:Mode=rule --Probe:Exe=<path>: prints what the rules do for a focused exe, with the real config and catalog.
 // Usage: ScreenSorter.Probe <folder> [--Section:Key=value ...]
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -36,6 +37,14 @@ bool IsImage(string f) => extensions.Contains(Path.GetExtension(f), StringCompar
 
 if (string.Equals(builder.Configuration["Probe:Mode"], "embed", StringComparison.OrdinalIgnoreCase))
     return await EmbedAsync();
+if (string.Equals(builder.Configuration["Probe:Mode"], "rule", StringComparison.OrdinalIgnoreCase))
+{
+    var exe = builder.Configuration["Probe:Exe"] ?? "";
+    var rule = host.Services.GetRequiredService<ScreenSorter.Core.Rules.RulesEngine>()
+        .Classify(new ScreenSorter.Core.Models.FocusSnapshot(DateTimeOffset.UtcNow, Path.GetFileName(exe), exe, ""));
+    Console.WriteLine(rule is null ? $"{exe} => no rule (vision queue)" : $"{exe} => {rule.Category}{(rule.SubFolder is null ? "" : "/" + rule.SubFolder)}");
+    return 0;
+}
 return await ClassifyAsync();
 
 async Task<int> ClassifyAsync()

@@ -11,11 +11,49 @@ public class RulesEngineTests
         public string? TryGetTitle(string exePath) => title;
     }
 
-    private static RulesEngine Engine(string? manifestTitle = null)
+    private static RulesEngine Engine(string? manifestTitle = null, params string[] knownGames)
     {
         var rules = Opt(DefaultRules());
-        return new RulesEngine(rules, new GameDetector(rules, new FixedTitles(manifestTitle)));
+        return new RulesEngine(rules, new GameDetector(rules, new FixedTitles(manifestTitle), new FixedCatalog(knownGames)));
     }
+
+    [Theory]
+    [InlineData(@"D:\Games\ZZZ\ZenlessZoneZero Game\ZenlessZoneZero.exe", "Zenless Zone Zero")]
+    [InlineData(@"D:\Games\Genshin\Genshin Impact game\GenshinImpact.exe", "Genshin Impact")]
+    [InlineData(@"E:\anywhere\GENSHINIMPACT.EXE", "Genshin Impact")]
+    public void Classify_GameOutsideLibrary_FoundByExeName(string exe, string title)
+    {
+        var c = Engine(null, "Zenless Zone Zero", "Genshin Impact").Classify(Focus(Path.GetFileName(exe), "", exe));
+
+        Assert.Equal(("Games", title, title), (c?.Category, c?.SubFolder, c?.Name));
+    }
+
+    [Theory]
+    [InlineData(@"D:\Tools\Genshin.exe")]
+    [InlineData(@"D:\Tools\GenshinImpactHelper.exe")]
+    public void Classify_ExeName_MustMatchWholeTitle(string exe) =>
+        Assert.Null(Engine(null, "Genshin Impact").Classify(Focus(Path.GetFileName(exe), "", exe)));
+
+    [Fact]
+    public void Classify_GameOutsideLibrary_FoundByAlias()
+    {
+        var c = Engine().Classify(Focus("cs2.exe", "", @"D:\Games\cs2\cs2.exe"));
+
+        Assert.Equal("Counter-Strike 2", c?.SubFolder);
+    }
+
+    [Fact]
+    public void Classify_AppNotInCatalog_StillUsesAppRules() =>
+        Assert.Equal("Chat", Engine(null, "Genshin Impact").Classify(Focus("Discord.exe"))?.Category);
+
+    [Fact]
+    public void Classify_ExcludedLauncher_IsNotAGame_EvenIfKnown() =>
+        Assert.Null(Engine(null, "EpicGamesLauncher").Classify(
+            Focus("EpicGamesLauncher.exe", "", @"C:\Program Files (x86)\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe")));
+
+    [Fact]
+    public void Classify_UnknownExePath_IsNotAGame() =>
+        Assert.Null(Engine(null, "Genshin Impact").Classify(new ScreenSorter.Core.Models.FocusSnapshot(T0, "", "", "Genshin Impact")));
 
     [Theory]
     [InlineData("Discord.exe", "", "Chat", "Discord", "Discord")]

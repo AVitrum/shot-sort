@@ -42,7 +42,7 @@ public sealed class SortPipelineTests : IDisposable
         _log = new SqliteDecisionLog(paths);
         var examples = new ExampleClassifier(_embedder, _examples, Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
         _pipeline = new SortPipeline(store, _focus,
-            new RulesEngine(rules, new GameDetector(rules, new NoTitles())), examples, new WicImageInspector(), _vision,
+            new RulesEngine(rules, new GameDetector(rules, new NoTitles(), new FixedCatalog())), examples, new WicImageInspector(), _vision,
             new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, TimeProvider.System,
             NullLogger<SortPipeline>.Instance);
     }
