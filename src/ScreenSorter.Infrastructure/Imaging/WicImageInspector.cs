@@ -6,7 +6,7 @@ using ScreenSorter.Core.Vision;
 namespace ScreenSorter.Infrastructure.Imaging;
 
 /// <summary>
-/// <see cref="IImageInspector"/> on WPF imaging (Windows Imaging Component), ADR-0003.
+/// <see cref="IImageInspector"/> on WPF imaging (Windows Imaging Component).
 /// Thread-safe: every call decodes into its own frozen bitmap.
 /// </summary>
 public sealed class WicImageInspector : IImageInspector
@@ -56,7 +56,7 @@ public sealed class WicImageInspector : IImageInspector
     {
         var original = ReadSize(imagePath);
         // Scaling one dimension keeps the aspect ratio. WIC's scaler differs from CLIP's bicubic, which is fine
-        // as long as stored examples and queries use the same path (ADR-0003).
+        // as long as stored examples and queries use the same path.
         var scaled = original.Width >= original.Height ? Decode(imagePath, 0, size) : Decode(imagePath, size, 0);
         var rgb = new FormatConvertedBitmap(scaled, PixelFormats.Rgb24, null, 0);
         rgb.Freeze();

@@ -48,7 +48,7 @@ public interface IExampleStore
 /// <param name="FileHash">Lower-case hex SHA-256 of the file; the example's identity.</param>
 /// <param name="Category">Top-level folder.</param>
 /// <param name="SubFolder">Second-level folder, or <see langword="null"/>.</param>
-/// <param name="Source">Where the label came from; currently always <see cref="UserSource"/> (D-018).</param>
+/// <param name="Source">Where the label came from; currently always <see cref="UserSource"/>.</param>
 /// <param name="CreatedAt">When it was learned, UTC.</param>
 public sealed record Example(string FileHash, string Category, string? SubFolder, string Source, DateTimeOffset CreatedAt)
 {

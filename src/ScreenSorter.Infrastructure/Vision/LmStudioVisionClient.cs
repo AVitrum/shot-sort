@@ -102,7 +102,7 @@ public sealed class LmStudioVisionClient(
     /// <param name="imageBase64">Base64 JPEG.</param>
     /// <param name="hint">Focused window, if known.</param>
     /// <param name="knownGames">
-    /// Valid game titles. When non-empty, <c>game_title</c> is restricted to these or "" (D-017);
+    /// Valid game titles. When non-empty, <c>game_title</c> is restricted to these or "";
     /// when empty it is free text.
     /// </param>
     /// <returns>The JSON body.</returns>

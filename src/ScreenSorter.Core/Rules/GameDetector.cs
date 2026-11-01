@@ -11,8 +11,8 @@ namespace ScreenSorter.Core.Rules;
 /// </summary>
 /// <remarks>
 /// Under a library, title order: alias map, launcher metadata (<see cref="IGameTitleProvider"/>), install folder
-/// name, window title; the alias map is applied again to the result (D-004). Elsewhere: alias of the exe name, or
-/// the <see cref="IGameCatalog"/> title with the same <see cref="SortedPathBuilder.MatchKey"/> (D-023).
+/// name, window title; the alias map is applied again to the result. Elsewhere: alias of the exe name, or
+/// the <see cref="IGameCatalog"/> title with the same <see cref="SortedPathBuilder.MatchKey"/>.
 /// </remarks>
 public sealed class GameDetector(IOptions<RulesOptions> options, IGameTitleProvider titles, IGameCatalog catalog)
 {

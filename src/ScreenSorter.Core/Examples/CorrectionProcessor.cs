@@ -24,7 +24,7 @@ public enum CorrectionOutcome
 
 /// <summary>
 /// Compares a file's folder with the decision log and learns from the difference.
-/// A file the log does not know counts as placed by the user (D-019).
+/// A file the log does not know counts as placed by the user.
 /// </summary>
 public sealed class CorrectionProcessor(
     IScreenshotStore files,

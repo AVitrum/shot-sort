@@ -15,8 +15,8 @@ namespace ScreenSorter.Core.Sorting;
 /// (when idle): ask the vision model. Both end in the same move-rename-log step.
 /// </summary>
 /// <remarks>
-/// Files without focus history (backlog) are left in place as <see cref="SortOutcomeKind.Deferred"/>
-/// (D-003). Files that neither rules nor examples can place, or where the two disagree, stay in place and
+/// Files without focus history (backlog) are left in place as <see cref="SortOutcomeKind.Deferred"/>.
+/// Files that neither rules nor examples can place, or where the two disagree, stay in place and
 /// are returned as <see cref="SortOutcomeKind.Queued"/> for the vision queue.
 /// </remarks>
 public sealed class SortPipeline(

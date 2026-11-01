@@ -18,7 +18,7 @@ public sealed class VisionMapper(IOptions<LmStudioOptions> lmStudio, IOptions<Ru
 
     /// <summary>
     /// Maps the answer. Low confidence, unknown categories, and games without a title go to review; so do games
-    /// whose title is not in <see cref="IGameCatalog"/> (when the catalog is not empty, D-017).
+    /// whose title is not in <see cref="IGameCatalog"/> (when the catalog is not empty).
     /// </summary>
     /// <param name="result">The model's answer, or <see langword="null"/> if it was unusable.</param>
     /// <returns>A <see cref="DecisionStage.Vision"/> classification, or a review classification.</returns>

@@ -10,7 +10,7 @@ using ScreenSorter.Core.Examples;
 namespace ScreenSorter.Infrastructure.Qdrant;
 
 /// <summary>
-/// <see cref="IExampleStore"/> over Qdrant's REST API (ADR-0004). The collection is created on the first upsert.
+/// <see cref="IExampleStore"/> over Qdrant's REST API. The collection is created on the first upsert.
 /// Point ids are derived from the file hash, so the same file always maps to one example.
 /// </summary>
 public sealed class QdrantExampleStore(HttpClient http, IOptions<QdrantOptions> options, IOptions<ClipOptions> clip) : IExampleStore

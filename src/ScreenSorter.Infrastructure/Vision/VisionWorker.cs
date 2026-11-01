@@ -13,11 +13,11 @@ namespace ScreenSorter.Infrastructure.Vision;
 /// Drains <see cref="VisionQueue"/> through <see cref="SortPipeline.ProcessQueuedAsync"/> only while the
 /// system is idle. "Sort now" ignores the idle rules until the queue is empty. When LM Studio is
 /// unavailable the item is put back and the worker waits <see cref="LmStudioOptions.RetryMinutes"/>. The model is
-/// released whenever work stops: queue drained, idle ended, paused, request failed, or shutdown (D-022).
+/// released whenever work stops: queue drained, idle ended, paused, request failed, or shutdown.
 /// </summary>
 /// <remarks>
 /// The GPU condition is only checked before the first item of a batch: the model's own inference
-/// keeps the GPU busy, so checking it between items would stop every batch after one file (D-012).
+/// keeps the GPU busy, so checking it between items would stop every batch after one file.
 /// </remarks>
 public sealed class VisionWorker(
     VisionQueue queue,
