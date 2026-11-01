@@ -4,10 +4,11 @@
 // --Probe:Mode=embed: embeds every image under a folder with CLIP and prints each image's nearest neighbours, to
 // check Thresholds:ExampleSimilarity. Downloads the CLIP model if it is missing.
 // --Probe:Mode=rule --Probe:Exe=<path>: prints what the rules do for a focused exe, with the real config and catalog.
-// --Probe:Mode=rename-sorted: one-time cleanup for a sorted root (the folder argument). Lists Snipping Tool names in
-// category folders and what they would become. With --Probe:Apply=true --Probe:MapFile=<csv> it renames them, logs
-// each new path and writes old,new to the file. Stop the app first. Files the log does not know, or knows under
-// another folder, are left to the app's correction step.
+// --Probe:Mode=rename-sorted: one-time cleanup for a sorted root (the folder argument). Lists generated names in
+// category folders that differ from the name the decision log holds for their folder, and what they would become.
+// With --Probe:Apply=true --Probe:MapFile=<csv> it renames them, logs each new path and writes old,new to the file.
+// Stop the app first. Files the log does not know, or knows under another folder, are left to the app's correction
+// step, and names the log expects, such as Zoom_ in Calls or process hints in the review folder, are kept.
 // Usage: ScreenSorter.Probe <folder> [--Section:Key=value ...]
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -73,13 +74,13 @@ async Task<int> RenameSortedAsync()
     var log = host.Services.GetRequiredService<IDecisionLog>();
     var files = Directory.EnumerateDirectories(root)
         .SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories))
-        .Where(f => IsImage(f) && Path.GetFileName(f).StartsWith("Screenshot ", StringComparison.Ordinal) && CaptureTime.FromFileName(f) is not null)
+        .Where(f => IsImage(f) && CaptureTime.FromFileName(f) is not null)
         .Order()
         .ToList();
 
     var map = new List<string>();
     var perFolder = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-    int renamed = 0, unknown = 0, otherFolder = 0;
+    int renamed = 0, unknown = 0, otherFolder = 0, alreadyRight = 0;
     foreach (var file in files)
     {
         var (category, sub) = CorrectionProcessor.LabelOf(root, file)!.Value;
@@ -98,11 +99,22 @@ async Task<int> RenameSortedAsync()
             continue;
         }
 
-        var name = string.Equals(category, review, StringComparison.OrdinalIgnoreCase)
+        // Older log rows for files moved into the review folder hold the folder's name instead of a file name.
+        var name = string.Equals(record.Classification.Name, review, StringComparison.OrdinalIgnoreCase)
             ? ScreenSorter.Core.Models.Classification.Review(category).Name
-            : sub ?? category;
+            : record.Classification.Name;
         var target = Path.Combine(Path.GetDirectoryName(file)!,
             SortedPathBuilder.FileName(name, CaptureTime.FromFileName(file)!.Value, Path.GetExtension(file)));
+
+        var stem = Path.GetFileNameWithoutExtension(file);
+        var targetStem = Path.GetFileNameWithoutExtension(target);
+        if (string.Equals(stem, targetStem, StringComparison.OrdinalIgnoreCase)
+            || (stem.StartsWith(targetStem + "_", StringComparison.OrdinalIgnoreCase) && stem[(targetStem.Length + 1)..].All(char.IsDigit)))
+        {
+            alreadyRight++;
+            continue;
+        }
+
         if (apply)
         {
             target = store.Move(file, target);
@@ -115,13 +127,13 @@ async Task<int> RenameSortedAsync()
         renamed++;
         var folder = sub is null ? category : $"{category}/{sub}";
         perFolder[folder] = perFolder.GetValueOrDefault(folder) + 1;
-        if (renamed <= 5)
+        if (renamed <= 8)
             Console.WriteLine($"{Path.GetRelativePath(root, file)} -> {Path.GetFileName(target)}");
     }
 
     foreach (var (folder, count) in perFolder)
         Console.WriteLine($"{count,5} {folder}");
-    Console.WriteLine($"{(apply ? "renamed" : "would rename")} {renamed} of {files.Count}; not in the log: {unknown}; logged under another folder: {otherFolder}");
+    Console.WriteLine($"{(apply ? "renamed" : "would rename")} {renamed} of {files.Count}; already right: {alreadyRight}; not in the log: {unknown}; logged under another folder: {otherFolder}");
     return 0;
 }
 
