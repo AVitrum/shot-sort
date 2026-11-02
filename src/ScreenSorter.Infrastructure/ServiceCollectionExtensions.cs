@@ -17,10 +17,10 @@ using ScreenSorter.Infrastructure.Files;
 using ScreenSorter.Infrastructure.Games;
 using ScreenSorter.Infrastructure.Imaging;
 using ScreenSorter.Infrastructure.Intake;
-using ScreenSorter.Infrastructure.Qdrant;
 using ScreenSorter.Infrastructure.Status;
 using ScreenSorter.Infrastructure.Vision;
 using ScreenSorter.Infrastructure.Storage;
+using ScreenSorter.Infrastructure.Updates;
 using ScreenSorter.Infrastructure.Win32;
 
 namespace ScreenSorter.Infrastructure;
@@ -46,12 +46,13 @@ public static class ServiceCollectionExtensions
         services.Configure<IdleOptions>(configuration.GetSection(IdleOptions.Section));
         services.Configure<GameCatalogOptions>(configuration.GetSection(GameCatalogOptions.Section));
         services.Configure<ClipOptions>(configuration.GetSection(ClipOptions.Section));
-        services.Configure<QdrantOptions>(configuration.GetSection(QdrantOptions.Section));
+        services.Configure<ExamplesOptions>(configuration.GetSection(ExamplesOptions.Section));
         services.Configure<CorrectionsOptions>(configuration.GetSection(CorrectionsOptions.Section));
         services.Configure<BacklogOptions>(configuration.GetSection(BacklogOptions.Section));
         services.Configure<NotificationsOptions>(configuration.GetSection(NotificationsOptions.Section));
         services.Configure<StatusOptions>(configuration.GetSection(StatusOptions.Section));
         services.Configure<PrivacyOptions>(configuration.GetSection(PrivacyOptions.Section));
+        services.Configure<UpdatesOptions>(configuration.GetSection(UpdatesOptions.Section));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SortActivity>();
@@ -75,31 +76,37 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IGameCatalog>(),
             sp.GetRequiredService<IOptions<LmStudioOptions>>(),
             sp.GetRequiredService<ILogger<LmStudioVisionClient>>()));
+        services.AddSingleton<IVisionServerStarter, LmsServerStarter>();
         // No client timeout: the model download takes minutes. It has its own cancellation.
         services.AddSingleton(sp => new ClipModelFile(
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
             sp.GetRequiredService<IOptions<ClipOptions>>(),
             sp.GetRequiredService<ILogger<ClipModelFile>>()));
         services.AddSingleton<IImageEmbedder, ClipImageEmbedder>();
-        services.AddSingleton<IExampleStore>(sp => new QdrantExampleStore(
-            new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
-            sp.GetRequiredService<IOptions<QdrantOptions>>(),
-            sp.GetRequiredService<IOptions<ClipOptions>>()));
+        services.AddSingleton<IExampleStore, SqliteExampleStore>();
         services.AddSingleton<ExampleClassifier>();
         services.AddSingleton<CorrectionProcessor>();
+        services.AddSingleton<ExampleRebuilder>();
         services.AddSingleton<SortPipeline>();
         services.AddSingleton<DecisionHistory>();
+        // No client timeout: the installer download takes minutes. Asking for the version has its own limit.
+        services.AddSingleton(sp => new GitHubUpdateClient(
+            new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
+            sp.GetRequiredService<IOptions<UpdatesOptions>>()));
+        services.AddSingleton<UpdateService>();
 
         // Registered in display order.
         services.AddSingleton<IServiceProbe, SortingProbe>();
         services.AddSingleton<IServiceProbe>(sp => new LmStudioProbe(
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
             sp.GetRequiredService<VisionQueue>(),
+            sp.GetRequiredService<IVisionServerStarter>(),
             sp.GetRequiredService<IOptions<LmStudioOptions>>(),
             sp.GetRequiredService<IOptions<StatusOptions>>()));
-        services.AddSingleton<IServiceProbe, QdrantProbe>();
+        services.AddSingleton<IServiceProbe, ExampleStoreProbe>();
         services.AddSingleton<IServiceProbe, ClipModelProbe>();
         services.AddSingleton<IServiceProbe, WatchFolderProbe>();
+        services.AddSingleton<IServiceProbe, UpdateProbe>();
         services.AddSingleton<StatusMonitor>();
 
         // Focus tracking must be running before intake sorts the first new file.
@@ -110,6 +117,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<CorrectionWatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<StatusMonitor>());
         services.AddHostedService<PrivacyMaintenance>();
+        services.AddHostedService(sp => sp.GetRequiredService<UpdateService>());
         return services;
     }
 }

@@ -53,14 +53,16 @@ public sealed class SortPipeline(
             }
 
             var created = store.GetCreationTime(path);
-            var snapshot = focus.GetFocusAt(created);
+            var hash = await store.ComputeHashAsync(path, ct);
+            // A file that was waiting when the app closed is not backlog: what was known about it still holds.
+            var snapshot = focus.GetFocusAt(created) ?? await log.FindWaitingFocusAsync(hash, ct);
             if (snapshot is null && !backlog.Value.Enabled)
             {
                 logger.LogDebug("Deferred {Path}: no focus history at {Created}", path, created);
                 return new SortOutcome(SortOutcomeKind.Deferred, path);
             }
 
-            if (await log.FindLatestByHashAsync(await store.ComputeHashAsync(path, ct), ct) is { Classification.Stage: DecisionStage.Undone })
+            if (await log.FindLatestByHashAsync(hash, ct) is { Classification.Stage: DecisionStage.Undone })
             {
                 logger.LogDebug("Left {Path} alone: the user undid its move", path);
                 return new SortOutcome(SortOutcomeKind.Deferred, path);
@@ -79,6 +81,8 @@ public sealed class SortPipeline(
             // Focus is only a hint: a region snip can show a window that was not focused. On conflict the model decides.
             logger.LogInformation("Queued {Path} for the vision model ({Process}; rule {Rule}, examples {Example})",
                 path, snapshot?.ProcessName ?? "backlog", rule?.Category, example?.Category);
+            if (snapshot is not null)
+                await log.SaveWaitingFocusAsync(hash, snapshot, ct);
             return new SortOutcome(SortOutcomeKind.Queued, path, Focus: snapshot);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

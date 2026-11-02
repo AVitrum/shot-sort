@@ -17,8 +17,35 @@ public class LmStudioProbeTests
     private const string Model = "vendor/model";
     private readonly VisionQueue _queue = new();
 
-    private LmStudioProbe Probe(HttpMessageHandler handler) => new(new HttpClient(handler), _queue,
+    private readonly FakeServerStarter _starter = new();
+
+    private LmStudioProbe Probe(HttpMessageHandler handler) => new(new HttpClient(handler), _queue, _starter,
         Opt(new LmStudioOptions { ManagementUrl = "http://lm.test/api/v1", Model = Model }), Opt(new StatusOptions()));
+
+    [Fact]
+    public async Task Unreachable_ButStartable_IsNotAProblem()
+    {
+        _starter.CanStart = true;
+        _queue.Enqueue(new VisionWorkItem("a.png", null));
+
+        var check = await Probe(new Refuse()).CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ServiceState.Waiting, check.State);
+        Assert.False(check.NeedsAttention);
+    }
+
+    [Fact]
+    public async Task Unreachable_AfterAFailedStart_IsAProblem()
+    {
+        _starter.CanStart = true;
+        _starter.LastStartFailed = true;
+        _queue.Enqueue(new VisionWorkItem("a.png", null));
+
+        var check = await Probe(new Refuse()).CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ServiceState.Problem, check.State);
+        Assert.True(check.NeedsAttention);
+    }
 
     [Fact]
     public async Task ModelPresent_IsOk()
@@ -70,7 +97,7 @@ public class LmStudioProbeTests
     [Fact]
     public async Task NoAnswerInTime_IsAProblem()
     {
-        var probe = new LmStudioProbe(new HttpClient(new Hang()), _queue,
+        var probe = new LmStudioProbe(new HttpClient(new Hang()), _queue, _starter,
             Opt(new LmStudioOptions { ManagementUrl = "http://lm.test/api/v1", Model = Model }), Opt(new StatusOptions { ProbeTimeoutSeconds = 0 }));
 
         var check = await probe.CheckAsync(CancellationToken.None);
@@ -109,38 +136,25 @@ public class LmStudioProbeTests
     }
 }
 
-public class QdrantProbeTests
+public class ExampleStoreProbeTests
 {
     [Fact]
-    public async Task Running_ReportsTheCount()
+    public async Task Readable_ReportsTheCount()
     {
-        var check = await new QdrantProbe(new Store { Count = 3 }).CheckAsync(CancellationToken.None);
+        var check = await new ExampleStoreProbe(new Store { Count = 3 }).CheckAsync(CancellationToken.None);
 
         Assert.Equal(ServiceState.Ok, check.State);
         Assert.Contains("3 examples", check.Detail);
     }
 
     [Fact]
-    public async Task NeverSeenRunning_IsAProblemButNotNews()
+    public async Task Unreadable_IsNews()
     {
-        var check = await new QdrantProbe(new Store { Down = true }).CheckAsync(CancellationToken.None);
+        var check = await new ExampleStoreProbe(new Store { Down = true }).CheckAsync(CancellationToken.None);
 
         Assert.Equal(ServiceState.Problem, check.State);
-        Assert.False(check.NeedsAttention);
-        Assert.Contains("docker compose", check.FixCommand);
-        Assert.Contains("docker-compose.yml", check.FixCommand);
-    }
-
-    [Fact]
-    public async Task StoppedAfterRunning_IsNews()
-    {
-        var store = new Store();
-        var probe = new QdrantProbe(store);
-        await probe.CheckAsync(CancellationToken.None);
-
-        store.Down = true;
-
-        Assert.True((await probe.CheckAsync(CancellationToken.None)).NeedsAttention);
+        Assert.True(check.NeedsAttention);
+        Assert.Null(check.FixCommand);
     }
 
     private sealed class Store : IExampleStore
@@ -149,6 +163,7 @@ public class QdrantProbeTests
         public bool Down { get; set; }
 
         public Task<long> CountAsync(CancellationToken ct) => Down ? throw new ExamplesUnavailableException("down") : Task.FromResult(Count);
+        public Task<IReadOnlySet<string>> ListFileHashesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task UpsertAsync(Example example, float[] vector, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(string fileHash, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<ExampleHit>> SearchAsync(float[] vector, int limit, CancellationToken ct) => throw new NotSupportedException();

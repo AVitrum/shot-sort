@@ -86,6 +86,44 @@ public sealed class PrivacyTests : IDisposable
     }
 
     [Fact]
+    public async Task WaitingFocus_FollowsTheRetentionSetting()
+    {
+        var log = Log(titleDays: 0);
+
+        await log.SaveWaitingFocusAsync("h", Record("h", Now).Focus!, CancellationToken.None);
+
+        var focus = await log.FindWaitingFocusAsync("h", CancellationToken.None);
+        Assert.Equal(("Discord.exe", "", ""), (focus?.ProcessName, focus?.ExePath, focus?.WindowTitle));
+    }
+
+    [Fact]
+    public async Task Erase_RemovesOldWaitingFocus_KeepsNewOne()
+    {
+        var log = Log();
+        await log.SaveWaitingFocusAsync("old", Record("old", Now.AddDays(-40)).Focus!, CancellationToken.None);
+        await log.SaveWaitingFocusAsync("new", Record("new", Now.AddDays(-1)).Focus!, CancellationToken.None);
+
+        await log.EraseFocusDetailsAsync(Now.AddDays(-30), CancellationToken.None);
+
+        Assert.Null(await log.FindWaitingFocusAsync("old", CancellationToken.None));
+        Assert.NotNull(await log.FindWaitingFocusAsync("new", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task WaitingFocus_LeavesNoTrace_OnceDecidedAndErased()
+    {
+        var log = Log();
+        await log.SaveWaitingFocusAsync("h", Record("h", Now.AddDays(-40)).Focus!, CancellationToken.None);
+        await log.RecordAsync(Record("h", Now.AddDays(-40)), CancellationToken.None);
+
+        await log.EraseFocusDetailsAsync(Now, CancellationToken.None);
+
+        var bytes = DatabaseBytes();
+        Assert.DoesNotContain("someone-secret-title", bytes);
+        Assert.DoesNotContain("somebody-secret-exe", bytes);
+    }
+
+    [Fact]
     public async Task Erase_LeavesNoTraceInTheDatabaseFiles()
     {
         var log = Log();

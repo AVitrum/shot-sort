@@ -93,6 +93,22 @@ internal sealed class FakeEmbedder : ScreenSorter.Core.Examples.IImageEmbedder
     }
 }
 
+internal sealed class FakeServerStarter : ScreenSorter.Core.Vision.IVisionServerStarter
+{
+    public bool CanStart { get; set; }
+    public bool LastStartFailed { get; set; }
+    public bool Result { get; set; } = true;
+    public int Calls { get; private set; }
+    public Action? OnStart { get; set; }
+
+    public Task<bool> TryStartAsync(CancellationToken ct)
+    {
+        Calls++;
+        OnStart?.Invoke();
+        return Task.FromResult(CanStart && Result);
+    }
+}
+
 internal sealed class FakeExampleStore : ScreenSorter.Core.Examples.IExampleStore
 {
     public bool Down { get; set; }
@@ -101,6 +117,12 @@ internal sealed class FakeExampleStore : ScreenSorter.Core.Examples.IExampleStor
     public List<string> Deleted { get; } = [];
 
     public Task<long> CountAsync(CancellationToken ct) { Fail(); return Task.FromResult((long)Hits.Count); }
+
+    public Task<IReadOnlySet<string>> ListFileHashesAsync(CancellationToken ct)
+    {
+        Fail();
+        return Task.FromResult<IReadOnlySet<string>>(Stored.Keys.ToHashSet());
+    }
 
     public Task UpsertAsync(ScreenSorter.Core.Examples.Example example, float[] vector, CancellationToken ct)
     {

@@ -61,6 +61,9 @@ public sealed class SettingsEditModel
     /// <summary>Whether screenshots taken while the app was not running are sorted too.</summary>
     public bool BacklogEnabled { get; set; }
 
+    /// <summary>Whether new versions are looked for and installed by themselves.</summary>
+    public bool UpdatesEnabled { get; set; }
+
     /// <summary>Whether a screenshot the user moves is renamed to match its new folder.</summary>
     public bool RenameMovedFiles { get; set; }
 
@@ -123,16 +126,18 @@ public sealed class SettingsEditModel
     /// <param name="notifications">Notification settings.</param>
     /// <param name="corrections">Correction settings.</param>
     /// <param name="privacy">Retention settings.</param>
+    /// <param name="updates">Automatic update settings.</param>
     /// <returns>A model holding copies of the values.</returns>
     public static SettingsEditModel From(PathsOptions paths, RulesOptions rules, GameCatalogOptions catalog,
         ThresholdsOptions thresholds, IdleOptions idle, LmStudioOptions lmStudio, BacklogOptions backlog,
-        NotificationsOptions notifications, CorrectionsOptions corrections, PrivacyOptions privacy)
+        NotificationsOptions notifications, CorrectionsOptions corrections, PrivacyOptions privacy, UpdatesOptions updates)
     {
         var model = new SettingsEditModel
         {
             SortedRoot = paths.SortedRoot,
             ReviewFolder = paths.ReviewFolder,
             BacklogEnabled = backlog.Enabled,
+            UpdatesEnabled = updates.Enabled,
             RenameMovedFiles = corrections.RenameMovedFiles,
             NotificationsEnabled = !string.Equals(notifications.Mode, NotificationsOptions.Off, StringComparison.OrdinalIgnoreCase),
             BrowserProcesses = string.Join(", ", rules.BrowserProcesses),
@@ -236,6 +241,7 @@ public sealed class SettingsEditModel
                 [nameof(PathsOptions.ReviewFolder)] = ReviewFolder.Trim(),
             },
             [BacklogOptions.Section] = new JsonObject { [nameof(BacklogOptions.Enabled)] = BacklogEnabled },
+            [UpdatesOptions.Section] = new JsonObject { [nameof(UpdatesOptions.Enabled)] = UpdatesEnabled },
             [CorrectionsOptions.Section] = new JsonObject { [nameof(CorrectionsOptions.RenameMovedFiles)] = RenameMovedFiles },
             [NotificationsOptions.Section] = new JsonObject
             {

@@ -11,10 +11,12 @@ namespace ScreenSorter.Infrastructure.Corrections;
 /// Watches the category folders under the sorted root recursively and passes files to
 /// <see cref="CorrectionProcessor"/> after <see cref="CorrectionsOptions.SettleSeconds"/>. A rescan at start and every
 /// <see cref="CorrectionsOptions.RescanMinutes"/> catches dropped events, moves made while the app was off, and
-/// corrections that could not be stored earlier. Files directly in the root belong to intake and are skipped.
+/// corrections that could not be stored earlier, and restores examples missing from the store. Files directly in the
+/// root belong to intake and are skipped.
 /// </summary>
 public sealed class CorrectionWatcher(
     CorrectionProcessor processor,
+    ExampleRebuilder rebuilder,
     IDecisionLog log,
     SortActivity activity,
     IOptions<PathsOptions> paths,
@@ -115,6 +117,15 @@ public sealed class CorrectionWatcher(
                 if (!known.Contains(file))
                     Schedule(file, fromEvent: false);
             }
+        }
+
+        try
+        {
+            await rebuilder.RunAsync(ct);
+        }
+        catch (ExamplesUnavailableException ex)
+        {
+            logger.LogInformation("Restoring examples waits: {Problem}", ex.Message);
         }
     }
 

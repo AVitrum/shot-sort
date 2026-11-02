@@ -1,6 +1,3 @@
-using System.Net;
-using System.Text;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ScreenSorter.Core.Configuration;
 using ScreenSorter.Core.Examples;
@@ -10,7 +7,6 @@ using ScreenSorter.Infrastructure.Clip;
 using ScreenSorter.Infrastructure.Corrections;
 using ScreenSorter.Infrastructure.Files;
 using ScreenSorter.Infrastructure.Imaging;
-using ScreenSorter.Infrastructure.Qdrant;
 using ScreenSorter.Infrastructure.Storage;
 using static ScreenSorter.Tests.TestSupport;
 
@@ -349,7 +345,7 @@ public sealed class CorrectionProcessorTests : IDisposable
         var path = InFolder(@"Games\Hades", seed: 1);
         await PlacedByApp(path, "Games", "Hades");
         var activity = new SortActivity();
-        var watcher = new CorrectionWatcher(_processor, _log, activity,
+        var watcher = new CorrectionWatcher(_processor, new ExampleRebuilder(_log, _examples, _embedder, _files, Opt(new PathsOptions { SortedRoot = _temp.Path, ReviewFolder = "_Review" }), NullLogger<ExampleRebuilder>.Instance), _log, activity,
             Opt(new PathsOptions { SortedRoot = _temp.Path }),
             Opt(new IntakeOptions()), Opt(new CorrectionsOptions { SettleSeconds = 0, RescanMinutes = 60 }),
             TimeProvider.System, NullLogger<CorrectionWatcher>.Instance);
@@ -380,91 +376,6 @@ public sealed class CorrectionProcessorTests : IDisposable
             Assert.True(DateTime.UtcNow < deadline, "timed out");
             await Task.Delay(100);
         }
-    }
-}
-
-public class QdrantExampleStoreTests
-{
-    private const string Hash = "fd6e1402a588279d1723c7534d4bcba5bc0b14b47dfab0e46f8c47b8270d7d40";
-
-    private sealed class Stub(params (HttpStatusCode Status, string Body)[] replies) : HttpMessageHandler
-    {
-        private int _next;
-        public Exception? Error { get; init; }
-        public List<(HttpMethod Method, string Url, string Body)> Requests { get; } = [];
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        {
-            if (Error is not null)
-                throw Error;
-            Requests.Add((request.Method, request.RequestUri!.PathAndQuery, request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct)));
-            var (status, body) = replies[Math.Min(_next++, replies.Length - 1)];
-            return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
-        }
-    }
-
-    private static QdrantExampleStore Store(HttpMessageHandler handler) =>
-        new(new HttpClient(handler), Opt(new QdrantOptions { Url = "http://localhost:6333/", Collection = "shots" }), Opt(new ClipOptions { EmbeddingSize = 2 }));
-
-    [Fact]
-    public async Task Count_ReadsResult_AndMissingCollectionIsZero()
-    {
-        Assert.Equal(7, await Store(new Stub((HttpStatusCode.OK, "{\"result\":{\"count\":7},\"status\":\"ok\"}"))).CountAsync(CancellationToken.None));
-        Assert.Equal(0, await Store(new Stub((HttpStatusCode.NotFound, "{}"))).CountAsync(CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task Upsert_CreatesMissingCollectionOnce_ThenWritesPoint()
-    {
-        var stub = new Stub((HttpStatusCode.NotFound, "{}"), (HttpStatusCode.OK, "{}"), (HttpStatusCode.OK, "{}"), (HttpStatusCode.OK, "{}"));
-        var store = Store(stub);
-        var example = new Example(Hash, "Games", "Hades", Example.UserSource, T0);
-
-        await store.UpsertAsync(example, [1f, 0f], CancellationToken.None);
-        await store.UpsertAsync(example, [1f, 0f], CancellationToken.None);
-
-        Assert.Equal(["/collections/shots", "/collections/shots", "/collections/shots/points?wait=true", "/collections/shots/points?wait=true"],
-            stub.Requests.Select(r => r.Url));
-        Assert.Equal(HttpMethod.Put, stub.Requests[1].Method);
-        Assert.Equal(2, JsonNode.Parse(stub.Requests[1].Body)!["vectors"]!["size"]!.GetValue<int>());
-        var point = JsonNode.Parse(stub.Requests[2].Body)!["points"]![0]!;
-        Assert.Equal(QdrantExampleStore.PointId(Hash), point["id"]!.GetValue<string>());
-        Assert.Equal("Hades", point["payload"]!["sub_folder"]!.GetValue<string>());
-    }
-
-    [Fact]
-    public async Task Search_ParsesPoints_IncludingNullSubFolder()
-    {
-        var store = Store(new Stub((HttpStatusCode.OK,
-            "{\"result\":{\"points\":[{\"id\":\"x\",\"version\":1,\"score\":0.99,\"payload\":{\"category\":\"Games\",\"sub_folder\":\"Hades\"}}," +
-            "{\"id\":\"y\",\"version\":1,\"score\":0.5,\"payload\":{\"category\":\"Browser\",\"sub_folder\":null}}]},\"status\":\"ok\"}")));
-
-        var hits = await store.SearchAsync([1f, 0f], 5, CancellationToken.None);
-
-        Assert.Equal([new ExampleHit(0.99, "Games", "Hades"), new ExampleHit(0.5, "Browser", null)], hits);
-    }
-
-    [Fact]
-    public async Task Delete_MissingCollection_IsFine() =>
-        await Store(new Stub((HttpStatusCode.NotFound, "{}"))).DeleteAsync(Hash, CancellationToken.None);
-
-    [Fact]
-    public async Task ServerError_IsUnavailable() =>
-        await Assert.ThrowsAsync<ExamplesUnavailableException>(() => Store(new Stub((HttpStatusCode.InternalServerError, "boom"))).CountAsync(CancellationToken.None));
-
-    [Fact]
-    public async Task ConnectionRefused_IsUnavailable() =>
-        await Assert.ThrowsAsync<ExamplesUnavailableException>(() => Store(new Stub { Error = new HttpRequestException("refused") }).CountAsync(CancellationToken.None));
-
-    [Fact]
-    public async Task MalformedResponse_IsUnavailable() =>
-        await Assert.ThrowsAsync<ExamplesUnavailableException>(() => Store(new Stub((HttpStatusCode.OK, "{\"result\":{}}"))).CountAsync(CancellationToken.None));
-
-    [Fact]
-    public void PointId_IsAStableUuid()
-    {
-        Assert.True(Guid.TryParse(QdrantExampleStore.PointId(Hash), out _));
-        Assert.Equal(QdrantExampleStore.PointId(Hash), QdrantExampleStore.PointId(Hash));
     }
 }
 

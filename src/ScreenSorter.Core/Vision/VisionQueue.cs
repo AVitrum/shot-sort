@@ -4,7 +4,7 @@ namespace ScreenSorter.Core.Vision;
 
 /// <summary>A screenshot waiting for the vision model.</summary>
 /// <param name="Path">File at the top level of a watch folder; it stays there while queued.</param>
-/// <param name="Focus">Focused window at capture time, passed to the model as a hint; <see langword="null"/> for backlog files.</param>
+/// <param name="Focus">Focused window at capture time, passed to the model as a hint; <see langword="null"/> for backlog files. The queue itself is in memory; the decision log keeps this for a restart.</param>
 public sealed record VisionWorkItem(string Path, FocusSnapshot? Focus);
 
 /// <summary>

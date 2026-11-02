@@ -10,7 +10,7 @@ namespace ScreenSorter.Core.Examples;
 public sealed class ExampleClassifier(
     IImageEmbedder embedder,
     IExampleStore store,
-    IOptions<QdrantOptions> qdrant,
+    IOptions<ExamplesOptions> options,
     IOptions<ThresholdsOptions> thresholds,
     ILogger<ExampleClassifier> logger)
 {
@@ -59,7 +59,7 @@ public sealed class ExampleClassifier(
                 return null;
 
             var vector = await embedder.EmbedAsync(imagePath, ct);
-            var hits = await store.SearchAsync(vector, qdrant.Value.TopK, ct);
+            var hits = await store.SearchAsync(vector, options.Value.TopK, ct);
             _lastProblem = "";
             var t = thresholds.Value;
             var match = Match(hits, t.ExampleSimilarity, t.ExampleAgreement);
@@ -68,7 +68,7 @@ public sealed class ExampleClassifier(
         }
         catch (ExamplesUnavailableException ex)
         {
-            // Qdrant may be down for days; one line per distinct problem, not one per screenshot.
+            // The model may be missing for a long time; one line per distinct problem, not one per screenshot.
             if (_lastProblem != ex.Message)
                 logger.LogWarning("Example stage unavailable, continuing without it: {Problem}", ex.Message);
             _lastProblem = ex.Message;

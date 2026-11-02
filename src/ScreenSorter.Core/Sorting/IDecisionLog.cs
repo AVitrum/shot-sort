@@ -5,10 +5,25 @@ namespace ScreenSorter.Core.Sorting;
 /// <summary>Durable record of every sorting decision.</summary>
 public interface IDecisionLog
 {
-    /// <summary>Appends a decision.</summary>
+    /// <summary>Appends a decision. A file with a decision no longer waits, so its saved focus is removed.</summary>
     /// <param name="record">The decision to store.</param>
     /// <param name="ct">Cancels the write.</param>
     Task RecordAsync(SortRecord record, CancellationToken ct);
+
+    /// <summary>
+    /// Saves the focused window of a file left waiting for the vision model, so the hint survives a restart. Follows the
+    /// same privacy settings as decisions.
+    /// </summary>
+    /// <param name="fileHash">Lower-case hex SHA-256 of the file.</param>
+    /// <param name="focus">The focused window at capture time.</param>
+    /// <param name="ct">Cancels the write.</param>
+    Task SaveWaitingFocusAsync(string fileHash, FocusSnapshot focus, CancellationToken ct);
+
+    /// <summary>Returns the focus saved for a waiting file.</summary>
+    /// <param name="fileHash">Lower-case hex SHA-256 of the file.</param>
+    /// <param name="ct">Cancels the query.</param>
+    /// <returns>The snapshot, or <see langword="null"/> if none was saved or it has been erased.</returns>
+    Task<FocusSnapshot?> FindWaitingFocusAsync(string fileHash, CancellationToken ct);
 
     /// <summary>Returns the most recent decision for a file content hash.</summary>
     /// <param name="fileHash">Lower-case hex SHA-256.</param>
@@ -34,6 +49,7 @@ public interface IDecisionLog
     /// <summary>
     /// Erases window titles and program paths recorded before a point in time, overwriting them on disk. Whole records
     /// stay: without them, sorted files would look placed by the user and the app would learn from its own guesses.
+    /// Focus saved for waiting files that old is removed as well.
     /// </summary>
     /// <param name="before">Details of focus snapshots older than this are erased.</param>
     /// <param name="ct">Cancels the update.</param>

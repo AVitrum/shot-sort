@@ -27,7 +27,7 @@ Each new screenshot goes through these stages:
 
 1. **Black or blank image:** goes to `_Review`. Failed fullscreen captures often look like this.
 2. **Focused window:** the app remembers which window had focus when the snip was taken. Rules in `appsettings.json` map apps to folders, and games are recognized by their install folder or exe name. This takes no model and is instant.
-3. **Confirmed examples:** the screenshot is compared with examples learned from your corrections, using CLIP image embeddings stored in Qdrant.
+3. **Confirmed examples:** the screenshot is compared with examples learned from your corrections, using CLIP image embeddings stored in the app's own database.
 4. **Vision model:** if the rules and examples can't place it, or they disagree, the file waits for the local vision model. The model runs only when the PC is idle: no input for 5 minutes, no fullscreen app, low GPU load. It is unloaded as soon as the work is done.
 
 ## Teaching it
@@ -44,29 +44,24 @@ This app moves and renames files in your screenshots folder, **including screens
 
 Right-click the tray icon for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, History, Status, How it works, Settings and Exit. Double-click it for Settings.
 
-**Status** shows whether LM Studio and Qdrant are running, how to start them, and how many screenshots wait and why. If a helper stops while it is needed, a notification tells you once.
+**Status** shows whether LM Studio is running, how many examples were learned, and how many screenshots wait and why. If something stops while it is needed, a notification tells you once.
 
 **History** lists where each screenshot went and why, with a preview. You can undo the app's move, which puts the file back and leaves it alone until you move it yourself, or send it to another folder, which teaches the app just like dragging it. **Accuracy** counts how often you moved what each stage placed, and which folders get mixed up most.
 
-Uninstalling from Windows Settings removes the app and leaves your screenshots and `%LOCALAPPDATA%\ScreenSorter` in place.
+Uninstalling from Windows Settings removes the app and asks whether to delete `%LOCALAPPDATA%\ScreenSorter` too. Your screenshots stay either way. A silent uninstall keeps the data. If you delete it and install again, the app treats files already sorted as placed by you.
 
-### Optional helpers
+New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. The installer is not code-signed. The app checks each download against the SHA-256 published with the release, which catches a damaged file but not a compromised release.
+
+### Optional helper
 
 | Needed for | What |
 |---|---|
-| Rules | Nothing more; they work out of the box |
-| Learning from corrections | [Docker Desktop](https://www.docker.com/products/docker-desktop/), for Qdrant |
-| Vision model | [LM Studio](https://lmstudio.ai/) with its server on, a vision model downloaded, and about 7 GB of free VRAM |
+| Rules and learning from corrections | Nothing more; they work out of the box |
+| Vision model | [LM Studio](https://lmstudio.ai/) with a vision model downloaded, and about 7 GB of free VRAM |
 
-Without Qdrant the example stage is skipped. Without LM Studio, files no rule can place stay in the screenshots folder until it is available.
+Without LM Studio, files no rule or example can place stay in the screenshots folder until it is available.
 
-To start Qdrant, run this in the app's install folder, `%LOCALAPPDATA%\Programs\ScreenSorter`, or in the repository:
-
-```bash
-docker compose up -d
-```
-
-In LM Studio, download the model named under **Vision model** in Settings and start the server.
+In LM Studio, download the model named under **Vision model** in Settings. When a screenshot needs the model and the PC is idle, ScreenSorter starts LM Studio's server with `lms server start` and leaves it running. To start it yourself instead, set `LmStudio:AutoStartServer` to `false` in `%LOCALAPPDATA%\ScreenSorter\settings.json`.
 
 On first run the app downloads the CLIP image model (352 MB) from Hugging Face and checks it against a pinned SHA-256.
 
@@ -86,7 +81,7 @@ dotnet run --project src/ScreenSorter.App -- --Paths:WatchFolders:0=C:\Temp\shot
 
 ## Existing screenshots
 
-Screenshots taken while the app was not running have no record of the focused window, so only their image content counts. Blank images go to `_Review`, files that closely match your examples are sorted right away, and the rest wait for the vision model behind any new screenshots. The model handles them while the PC is idle and stops as soon as you come back.
+Screenshots taken while the app was not running have no record of the focused window, so only their image content counts. Files still waiting for the vision model when the app closes keep their record. Blank images go to `_Review`, files that closely match your examples are sorted right away, and the rest wait for the vision model behind any new screenshots. The model handles them while the PC is idle and stops as soon as you come back.
 
 ## Settings
 
@@ -100,7 +95,7 @@ Any setting can also be overridden for one run on the command line with `--Secti
 
 ## Your data
 
-Data stays in `%LOCALAPPDATA%\ScreenSorter`: your settings, a marker that the guide was shown, the decision log (SQLite), logs and the CLIP model. Qdrant's data stays in a local Docker volume, reachable only from this machine. It holds image embeddings and folder names, not the images.
+Data stays in `%LOCALAPPDATA%\ScreenSorter`: your settings, a marker that the guide was shown, the decision log and learned examples (SQLite), logs and the CLIP model. Examples hold image embeddings and folder names, not the images.
 
 The decision log records file paths and the focused app's name, program path and window title. A window title can reveal a chat name, a document or a web page, so under **Settings > Privacy**:
 
@@ -109,11 +104,11 @@ The decision log records file paths and the focused app's name, program path and
 
 File paths and the rest of each record stay as long as the log does. They are how the app tells a file it sorted from one you placed yourself, so removing them would teach it from its own guesses. To remove everything, delete `%LOCALAPPDATA%\ScreenSorter`; the app then treats sorted files as placed by you.
 
-The app reads window titles, process paths, and Steam and Epic install data. While classifying, it passes the window title to the local model as a hint. Its only network traffic outside this machine is the one-time model download.
+The app reads window titles, process paths, and Steam and Epic install data. While classifying, it passes the window title to the local model as a hint. Its only network traffic outside this machine is the one-time model download and, unless you turn it off, a daily request to GitHub for the latest version and the download of a new one. Those requests carry no screenshots, file names or window titles.
 
 ## Current limits
 
-- The app does not start LM Studio's server or Qdrant. After a reboot, files that need them wait until they are running; **Status** shows this.
+- LM Studio itself is a separate install, and uninstalling ScreenSorter does not remove it.
 - The vision model can pick the wrong game from your known games. Moving the file to the right folder teaches the app.
 - Images only, no videos.
 
@@ -130,7 +125,7 @@ dotnet test ScreenSorter.slnx -v q -nologo
 | Path | What it is |
 |---|---|
 | `src/ScreenSorter.Core` | Pipeline, rules, examples, models and interfaces |
-| `src/ScreenSorter.Infrastructure` | Win32, file system, SQLite, LM Studio, Qdrant, CLIP |
+| `src/ScreenSorter.Infrastructure` | Win32, file system, SQLite, LM Studio, CLIP |
 | `src/ScreenSorter.App` | WPF tray host and `appsettings.json` |
 | `tests/ScreenSorter.Tests` | xUnit tests; they use temp folders only |
 | `tools/ScreenSorter.Probe` | Dev console for trying the model and rules without moving files |

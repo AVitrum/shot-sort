@@ -73,7 +73,7 @@ async Task<int> EvaluateAsync()
     var store = host.Services.GetRequiredService<IScreenshotStore>();
     var log = host.Services.GetRequiredService<IDecisionLog>();
     var embedder = host.Services.GetRequiredService<IImageEmbedder>();
-    var topK = builder.Configuration.GetValue($"{QdrantOptions.Section}:{nameof(QdrantOptions.TopK)}", 5);
+    var topK = builder.Configuration.GetValue($"{ExamplesOptions.Section}:{nameof(ExamplesOptions.TopK)}", 5);
 
     var confirmed = new List<(string File, string Category, string? Sub, float[] Vector)>();
     foreach (var file in Directory.EnumerateDirectories(root).SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories)).Where(IsImage).Order())

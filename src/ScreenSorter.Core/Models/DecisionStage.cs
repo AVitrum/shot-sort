@@ -9,7 +9,7 @@ public enum DecisionStage
     /// <summary>No stage could classify the file; it went to the review folder.</summary>
     Unmatched,
 
-    /// <summary>Nearest confirmed examples in Qdrant (milestone 4).</summary>
+    /// <summary>Nearest confirmed examples.</summary>
     Example,
 
     /// <summary>The LM Studio vision model (milestone 3).</summary>

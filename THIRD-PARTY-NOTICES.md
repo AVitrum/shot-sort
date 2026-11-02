@@ -24,7 +24,6 @@ ScreenSorter does not include these. Their own terms apply when you use them.
 | Component | How it gets there | License |
 |---|---|---|
 | CLIP ViT-B/32 image model, ONNX conversion by [Xenova](https://huggingface.co/Xenova/clip-vit-base-patch32) | Downloaded by the app on first run | [OpenAI CLIP](https://github.com/openai/CLIP/blob/main/LICENSE): MIT |
-| [Qdrant](https://github.com/qdrant/qdrant) | Docker image you start yourself | Apache-2.0 |
 | [LM Studio](https://lmstudio.ai/) and the vision model you choose | You install them | Their own terms |
 
 ## Used only to build and test

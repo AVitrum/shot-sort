@@ -41,7 +41,7 @@ public sealed class SortPipelineTests : IDisposable
         var thresholds = Opt(new ThresholdsOptions());
         var store = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
         _log = new SqliteDecisionLog(paths, Opt(new PrivacyOptions()));
-        var examples = new ExampleClassifier(_embedder, _examples, Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
+        var examples = new ExampleClassifier(_embedder, _examples, Opt(new ExamplesOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
         _pipeline = new SortPipeline(store, _focus,
             new RulesEngine(rules, new GameDetector(rules, new NoTitles(), new FixedCatalog())), examples, new WicImageInspector(), _vision,
             new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, Opt(_backlog), TimeProvider.System,
@@ -276,6 +276,60 @@ public sealed class SortPipelineTests : IDisposable
         var outcome = await _pipeline.ProcessQueuedAsync(new VisionWorkItem(BacklogFile(), null), CancellationToken.None);
 
         Assert.Equal(Path.Combine(_temp.Path, "Games", "Hades", "Hades_2026-10-10_12-11-10.png"), outcome.TargetPath);
+    }
+
+    private static Task<string> HashOf(string file) =>
+        new FileSystemScreenshotStore(Opt(new IntakeOptions()), TimeProvider.System).ComputeHashAsync(file, CancellationToken.None);
+
+    [Fact]
+    public async Task Process_Queued_SavesTheHintForARestart()
+    {
+        FocusOn("Code.exe");
+        _examples.Hits.Add(new ExampleHit(0.97, "Chat", "Discord"));
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
+
+        await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal("Code.exe", (await _log.FindWaitingFocusAsync(await HashOf(file), CancellationToken.None))?.ProcessName);
+    }
+
+    [Fact]
+    public async Task Process_AfterARestart_WaitingFileKeepsItsHint()
+    {
+        // Older than the focus history, as every file is after a restart: only the saved hint can supply the window.
+        var file = BacklogFile();
+        var saved = Focus("Slack.exe", at: DateTimeOffset.UtcNow.AddDays(-20));
+        await _log.SaveWaitingFocusAsync(await HashOf(file), saved, CancellationToken.None);
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal("Slack.exe", outcome.Focus?.ProcessName);
+    }
+
+    [Fact]
+    public async Task Process_AfterARestart_SavedHintCountsWithBacklogOff()
+    {
+        _backlog.Enabled = false;
+        var file = BacklogFile();
+        await _log.SaveWaitingFocusAsync(await HashOf(file), Focus("Slack.exe", at: DateTimeOffset.UtcNow.AddDays(-20)), CancellationToken.None);
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.NotEqual(SortOutcomeKind.Deferred, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task ProcessQueued_Decided_RemovesTheSavedHint()
+    {
+        var file = BacklogFile();
+        var hash = await HashOf(file);
+        var focus = Focus("Slack.exe", at: DateTimeOffset.UtcNow.AddDays(-20));
+        await _log.SaveWaitingFocusAsync(hash, focus, CancellationToken.None);
+        _vision.Result = new VisionResult("Game", "Hades", "", 0.95);
+
+        await _pipeline.ProcessQueuedAsync(new VisionWorkItem(file, focus), CancellationToken.None);
+
+        Assert.Null(await _log.FindWaitingFocusAsync(hash, CancellationToken.None));
     }
 
     private string BacklogFile()

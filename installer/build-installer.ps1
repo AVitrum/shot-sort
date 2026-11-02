@@ -8,13 +8,16 @@
     Version for the app and the file name, such as 1.2.3. Defaults to the version in Directory.Build.props.
 .PARAMETER SmokeTest
     Builds an installer without shortcuts, registry entries or the check for a running app, to try on a working machine.
+.PARAMETER SmokeMutex
+    With SmokeTest, keeps the check for a running app, to test that the app's own update gets past it.
 .OUTPUTS
     The path of the installer.
 #>
 [CmdletBinding()]
 param(
     [string]$Version,
-    [switch]$SmokeTest
+    [switch]$SmokeTest,
+    [switch]$SmokeMutex
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,6 +64,7 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXIT
 
 $arguments = @("/DAppVersion=$Version", "/DPublishDir=$publish", "/DOutputDir=$output", '/Q')
 if ($SmokeTest) { $arguments += '/DSmokeTest=1' }
+if ($SmokeMutex) { $arguments += '/DSmokeMutex=1' }
 & $iscc @arguments (Join-Path $PSScriptRoot 'ScreenSorter.iss')
 if ($LASTEXITCODE -ne 0) { throw "The installer compiler failed with exit code $LASTEXITCODE." }
 

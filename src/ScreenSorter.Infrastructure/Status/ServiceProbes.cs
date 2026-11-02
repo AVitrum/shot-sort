@@ -9,6 +9,7 @@ using ScreenSorter.Core.Sorting;
 using ScreenSorter.Core.Status;
 using ScreenSorter.Core.Vision;
 using ScreenSorter.Infrastructure.Clip;
+using ScreenSorter.Infrastructure.Updates;
 
 namespace ScreenSorter.Infrastructure.Status;
 
@@ -37,7 +38,7 @@ public sealed class SortingProbe(VisionQueue queue, SortActivity activity, IdleD
 }
 
 /// <summary>Checks that LM Studio's server answers and that it has the configured model.</summary>
-public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IOptions<LmStudioOptions> options, IOptions<StatusOptions> status) : IServiceProbe
+public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IVisionServerStarter starter, IOptions<LmStudioOptions> options, IOptions<StatusOptions> status) : IServiceProbe
 {
     private const string Name = "LM Studio";
 
@@ -66,6 +67,12 @@ public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IOptions<L
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
                                    || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
+            if (starter.CanStart && !starter.LastStartFailed)
+            {
+                return new ServiceCheck(Name, ServiceState.Waiting,
+                    "Not running. ScreenSorter starts its server when a screenshot needs the vision model and the PC is idle.");
+            }
+
             var detail = waiting == 0
                 ? "Not running. Screenshots that need the vision model will wait for it."
                 : $"Not running. {(waiting == 1 ? "1 screenshot waits" : $"{waiting} screenshots wait")} for it.";
@@ -87,11 +94,10 @@ public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IOptions<L
     }
 }
 
-/// <summary>Checks that Qdrant answers and reports how many examples it holds.</summary>
-public sealed class QdrantProbe(IExampleStore store) : IServiceProbe
+/// <summary>Reports how many examples the store holds, and whether it can be read.</summary>
+public sealed class ExampleStoreProbe(IExampleStore store) : IServiceProbe
 {
-    private const string Name = "Qdrant";
-    private bool _wasRunning;
+    private const string Name = "Examples";
 
     /// <inheritdoc />
     public async Task<ServiceCheck> CheckAsync(CancellationToken ct)
@@ -99,16 +105,14 @@ public sealed class QdrantProbe(IExampleStore store) : IServiceProbe
         try
         {
             var count = await store.CountAsync(ct);
-            _wasRunning = true;
-            return new ServiceCheck(Name, ServiceState.Ok, count == 1 ? "Running, with 1 example learned." : $"Running, with {count} examples learned.");
+            return new ServiceCheck(Name, ServiceState.Ok, count == 1 ? "1 example learned." : $"{count} examples learned.");
         }
         catch (ExamplesUnavailableException)
         {
-            var compose = Path.Combine(AppContext.BaseDirectory, "docker-compose.yml");
             return new ServiceCheck(Name, ServiceState.Problem,
-                "Not running. Sorting goes on, but examples are not used and files you move are learned later.",
-                "Start Docker Desktop, then run this command.", $"docker compose -f \"{compose}\" up -d",
-                NeedsAttention: _wasRunning);
+                "The database cannot be read. Sorting goes on, but examples are not used and files you move are learned later.",
+                "Restart the app. If this stays, check that the disk with your user profile has free space.",
+                NeedsAttention: true);
         }
     }
 }
@@ -120,6 +124,20 @@ public sealed class ClipModelProbe(ClipModelFile model) : IServiceProbe
     public Task<ServiceCheck> CheckAsync(CancellationToken ct) => Task.FromResult(model.ReadyPath is null
         ? new ServiceCheck("Image model", ServiceState.Waiting, "Being checked or downloaded. Examples are used once it is ready.")
         : new ServiceCheck("Image model", ServiceState.Ok, "Ready."));
+}
+
+/// <summary>Reports what the updater is doing.</summary>
+public sealed class UpdateProbe(UpdateService updates, IOptions<UpdatesOptions> options) : IServiceProbe
+{
+    /// <inheritdoc />
+    public Task<ServiceCheck> CheckAsync(CancellationToken ct)
+    {
+        var detail = !options.Value.Enabled ? "Automatic updates are off."
+            : !updates.IsActive ? "This copy was not installed, so it does not update itself."
+            : updates.WaitingVersion is { } waiting ? $"Version {waiting} is ready and installs when the PC is idle."
+            : "New versions install by themselves.";
+        return Task.FromResult(new ServiceCheck("Updates", ServiceState.Ok, detail));
+    }
 }
 
 /// <summary>Checks that the watch folders exist.</summary>
