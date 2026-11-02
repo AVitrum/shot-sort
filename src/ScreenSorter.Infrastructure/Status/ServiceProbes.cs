@@ -126,17 +126,16 @@ public sealed class ClipModelProbe(ClipModelFile model) : IServiceProbe
         : new ServiceCheck("Image model", ServiceState.Ok, "Ready."));
 }
 
-/// <summary>Reports this copy's version and what the updater is doing.</summary>
+/// <summary>Reports what the updater is doing.</summary>
 public sealed class UpdateProbe(UpdateService updates, IOptions<UpdatesOptions> options) : IServiceProbe
 {
     /// <inheritdoc />
     public Task<ServiceCheck> CheckAsync(CancellationToken ct)
     {
-        var version = $"Version {UpdateService.CurrentVersion.ToString(3)}.";
-        var detail = !options.Value.Enabled ? $"{version} Automatic updates are off."
-            : !updates.IsActive ? $"{version} This copy was not installed, so it does not update itself."
-            : updates.WaitingVersion is { } waiting ? $"{version} Version {waiting} is ready and installs when the PC is idle."
-            : $"{version} New versions install by themselves.";
+        var detail = !options.Value.Enabled ? "Automatic updates are off."
+            : !updates.IsActive ? "This copy was not installed, so it does not update itself."
+            : updates.WaitingVersion is { } waiting ? $"Version {waiting} is ready and installs when the PC is idle."
+            : "New versions install by themselves.";
         return Task.FromResult(new ServiceCheck("Updates", ServiceState.Ok, detail));
     }
 }
