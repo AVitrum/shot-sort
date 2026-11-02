@@ -45,15 +45,29 @@ public sealed class LmStudioVisionClient(
         var jpeg = images.ToJpeg(imagePath, _options.MaxImageSide, _options.JpegQuality);
         var request = BuildRequest(Convert.ToBase64String(jpeg), hint, games.GetTitles());
 
-        string body;
+        var body = await SendAsync(request, ct);
+        // A reasoning model can spend the whole limit before it answers. Most images need far less, so only those that
+        // ran out pay for the larger limit.
+        if (_options.RetryMaxTokens > _options.MaxTokens && RanOutOfTokens(body))
+        {
+            logger.LogInformation("Asking again with {Tokens} tokens: the answer did not fit in {Limit}", _options.RetryMaxTokens, _options.MaxTokens);
+            request["max_tokens"] = _options.RetryMaxTokens;
+            body = await SendAsync(request, ct);
+        }
+        return Parse(body);
+    }
+
+    private async Task<string> SendAsync(JsonObject request, CancellationToken ct)
+    {
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
             using var response = await http.PostAsJsonAsync(Endpoint(), request, timeout.Token);
-            body = await response.Content.ReadAsStringAsync(timeout.Token);
+            var body = await response.Content.ReadAsStringAsync(timeout.Token);
             if (!response.IsSuccessStatusCode)
                 throw new VisionUnavailableException($"LM Studio returned {(int)response.StatusCode}: {Truncate(body)}");
+            return body;
         }
         catch (HttpRequestException ex)
         {
@@ -63,8 +77,20 @@ public sealed class LmStudioVisionClient(
         {
             throw new VisionUnavailableException($"LM Studio did not answer within {_options.TimeoutSeconds} s", ex);
         }
+    }
 
-        return Parse(body);
+    private static bool RanOutOfTokens(string body)
+    {
+        try
+        {
+            var choice = JsonNode.Parse(body)?["choices"]?[0];
+            return choice?["finish_reason"]?.GetValue<string>() == "length"
+                && string.IsNullOrWhiteSpace(choice["message"]?["content"]?.GetValue<string>());
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />

@@ -24,6 +24,14 @@ public sealed class LmStudioOptions
     /// </summary>
     public int MaxTokens { get; set; } = 1024;
 
+    /// <summary>
+    /// Token limit for asking once more when the model ran out of tokens before answering. At or below
+    /// <see cref="MaxTokens"/> there is no second request, which is the default: these are the images the model finds
+    /// hard, and on real screenshots only 9 of 15 late answers matched the user's folder, so review is the safer place.
+    /// Above 2048 almost nothing more was answered, at about a minute per image.
+    /// </summary>
+    public int RetryMaxTokens { get; set; }
+
     /// <summary>Per-request timeout. The first request may include loading the model.</summary>
     public int TimeoutSeconds { get; set; } = 180;
 

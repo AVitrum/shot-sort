@@ -71,7 +71,7 @@ public sealed class SortPipeline(
 
             var rule = snapshot is null ? null : rules.Classify(snapshot);
             var example = await TryExamplesAsync(path, ct);
-            if (rule is not null && (example is null || SameFolder(rule, example)))
+            if (rule is not null && (example is null || SameFolder(rule, example) || example.Confidence < thresholds.Value.ExampleConflictSimilarity))
                 return await ActAsync(path, rule, snapshot, ct);
             if (rule is null && example is not null)
                 return await ActAsync(path, example, snapshot, ct);

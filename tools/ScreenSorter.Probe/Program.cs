@@ -3,6 +3,8 @@
 // folder it would map to, and the timing.
 // --Probe:Mode=embed: embeds every image under a folder with CLIP and prints each image's nearest neighbours, to
 // check Thresholds:ExampleSimilarity. Downloads the CLIP model if it is missing.
+// --Probe:Mode=evaluate: for a sorted root, holds out each screenshot the user confirmed and judges it by the others,
+// at a range of thresholds, to tune Thresholds:ExampleSimilarity and ExampleAgreement. Reads only.
 // --Probe:Mode=rule --Probe:Exe=<path>: prints what the rules do for a focused exe, with the real config and catalog.
 // --Probe:Mode=rename-sorted: one-time cleanup for a sorted root (the folder argument). Lists generated names in
 // category folders that differ from the name the decision log holds for their folder, and what they would become.
@@ -57,7 +59,76 @@ if (string.Equals(builder.Configuration["Probe:Mode"], "rule", StringComparison.
 }
 if (string.Equals(builder.Configuration["Probe:Mode"], "rename-sorted", StringComparison.OrdinalIgnoreCase))
     return await RenameSortedAsync();
+if (string.Equals(builder.Configuration["Probe:Mode"], "evaluate", StringComparison.OrdinalIgnoreCase))
+    return await EvaluateAsync();
 return await ClassifyAsync();
+
+async Task<int> EvaluateAsync()
+{
+    var modelFile = host.Services.GetRequiredService<ClipModelFile>();
+    await modelFile.StartAsync(CancellationToken.None);
+    await modelFile.ExecuteTask!;
+
+    var root = Path.GetFullPath(args[0]);
+    var store = host.Services.GetRequiredService<IScreenshotStore>();
+    var log = host.Services.GetRequiredService<IDecisionLog>();
+    var embedder = host.Services.GetRequiredService<IImageEmbedder>();
+    var topK = builder.Configuration.GetValue($"{QdrantOptions.Section}:{nameof(QdrantOptions.TopK)}", 5);
+
+    var confirmed = new List<(string File, string Category, string? Sub, float[] Vector)>();
+    foreach (var file in Directory.EnumerateDirectories(root).SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories)).Where(IsImage).Order())
+    {
+        var record = await log.FindLatestByHashAsync(await store.ComputeHashAsync(file, CancellationToken.None), CancellationToken.None);
+        var label = CorrectionProcessor.LabelOf(root, file);
+        if (record?.Classification.Stage != ScreenSorter.Core.Models.DecisionStage.UserCorrection || label is null
+            || string.Equals(label.Value.Category, builder.Configuration[$"{PathsOptions.Section}:{nameof(PathsOptions.ReviewFolder)}"], StringComparison.OrdinalIgnoreCase))
+            continue;
+        confirmed.Add((file, label.Value.Category, label.Value.SubFolder, await embedder.EmbedAsync(file, CancellationToken.None)));
+    }
+    Console.WriteLine($"Confirmed examples: {confirmed.Count} in {confirmed.Select(c => $"{c.Category}/{c.Sub}").Distinct().Count()} folders");
+
+    // Each file is held out and judged by all the others, the way a new screenshot is judged by stored examples.
+    var neighbours = confirmed.Select((c, i) => confirmed.Where((_, j) => j != i)
+        .Select(o => new ExampleHit(c.Vector.Zip(o.Vector, (a, b) => (double)a * b).Sum(), o.Category, o.Sub))
+        .OrderByDescending(h => h.Score).Take(topK).ToList()).ToList();
+
+    Console.WriteLine("similarity agreement  answered  coverage  right  precision  same-category");
+    foreach (var agreement in new[] { 0.6, 0.8, 1.0 })
+    {
+        foreach (var similarity in new[] { 0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96 })
+        {
+            int answered = 0, right = 0, sameCategory = 0;
+            for (var i = 0; i < confirmed.Count; i++)
+            {
+                if (ExampleClassifier.Match(neighbours[i], similarity, agreement) is not { } match)
+                    continue;
+                answered++;
+                var sameCat = string.Equals(match.Category, confirmed[i].Category, StringComparison.OrdinalIgnoreCase);
+                if (sameCat)
+                    sameCategory++;
+                if (sameCat && SortedPathBuilder.MatchKey(match.SubFolder ?? "") == SortedPathBuilder.MatchKey(confirmed[i].Sub ?? ""))
+                    right++;
+            }
+            Console.WriteLine($"{similarity,10:0.00} {agreement,9:0.0} {answered,9} {(double)answered / Math.Max(1, confirmed.Count),9:P0} {right,6} {(double)right / Math.Max(1, answered),10:P1} {(double)sameCategory / Math.Max(1, answered),14:P1}");
+        }
+    }
+
+    // Would the nearest examples catch a wrong vision answer? For each held-out file, the score of its nearest example
+    // with another label compared with its nearest example with the right one.
+    int nearestRight = 0, nearestWrong = 0;
+    for (var i = 0; i < confirmed.Count; i++)
+    {
+        if (neighbours[i].FirstOrDefault() is not { } top)
+            continue;
+        if (string.Equals(top.Category, confirmed[i].Category, StringComparison.OrdinalIgnoreCase)
+            && SortedPathBuilder.MatchKey(top.SubFolder ?? "") == SortedPathBuilder.MatchKey(confirmed[i].Sub ?? ""))
+            nearestRight++;
+        else
+            nearestWrong++;
+    }
+    Console.WriteLine($"Nearest example has the right label: {nearestRight} of {nearestRight + nearestWrong}");
+    return 0;
+}
 
 async Task<int> RenameSortedAsync()
 {

@@ -77,6 +77,8 @@
                                         Text="Handles waiting files right away instead of waiting for your PC to be idle." />
                 <local:IconRow Glyph="&#xE8B7;" Title="Open review folder"
                                         Text="Shows the screenshots that need a decision from you." />
+                <local:IconRow Glyph="&#xE81C;" Title="History"
+                                        Text="Shows where each screenshot went and why, and lets you undo a move." />
                 <Border Style="{StaticResource Card}" Margin="0,6,0,0">
                     <StackPanel>
                         <TextBlock Style="{StaticResource Heading}" Text="Two optional helpers" Margin="0,0,0,2" />

@@ -40,7 +40,7 @@ public sealed class SortPipelineTests : IDisposable
         var rules = Opt(DefaultRules());
         var thresholds = Opt(new ThresholdsOptions());
         var store = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
-        _log = new SqliteDecisionLog(paths);
+        _log = new SqliteDecisionLog(paths, Opt(new PrivacyOptions()));
         var examples = new ExampleClassifier(_embedder, _examples, Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
         _pipeline = new SortPipeline(store, _focus,
             new RulesEngine(rules, new GameDetector(rules, new NoTitles(), new FixedCatalog())), examples, new WicImageInspector(), _vision,
@@ -154,6 +154,30 @@ public sealed class SortPipelineTests : IDisposable
 
         Assert.Equal(SortOutcomeKind.Queued, outcome.Kind);
         Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Process_ExampleGoodEnoughAlone_DoesNotOutvoteARule()
+    {
+        FocusOn("Code.exe");
+        _examples.Hits.Add(new ExampleHit(0.86, "Chat", "Discord"));
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
+        Assert.Equal(Path.Combine(_temp.Path, "Code", "Code_2026-10-31_21-04-12.png"), outcome.TargetPath);
+    }
+
+    [Fact]
+    public async Task Process_ExampleGoodEnoughAlone_PlacesAFileNoRuleCovers()
+    {
+        _examples.Hits.Add(new ExampleHit(0.86, "Games", "Deadlock"));
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal(Path.Combine(_temp.Path, "Games", "Deadlock", "Deadlock_2026-10-31_21-04-12.png"), outcome.TargetPath);
     }
 
     [Fact]
