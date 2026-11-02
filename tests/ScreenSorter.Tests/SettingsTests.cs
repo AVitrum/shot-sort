@@ -64,7 +64,8 @@ public class SettingsEditModelTests
         new LmStudioOptions { BaseUrl = "http://localhost:1234/v1", Model = "m", Categories = SortPipelineTests.LmStudio().Categories },
         new BacklogOptions(),
         new NotificationsOptions(),
-        new CorrectionsOptions());
+        new CorrectionsOptions(),
+        new PrivacyOptions());
 
     [Fact]
     public void Defaults_AreValid() => Assert.Empty(Model().Validate());
@@ -89,6 +90,8 @@ public class SettingsEditModelTests
         { m => m.VisionConfidence = "1.5", "Vision confidence" },
         { m => m.MaxGpuUtilPercent = "101", "GPU" },
         { m => m.NoInputMinutes = "-1", "Minutes" },
+        { m => m.WindowTitleDays = "-1", "window titles" },
+        { m => m.LogDays = "0", "logs" },
         { m => m.LmStudioUrl = "localhost", "LM Studio URL" },
         { m => m.LmStudioModel = "", "model name" },
         { m => m.Rules.Add(new RuleRow { Target = "Code" }), "at least one process" },

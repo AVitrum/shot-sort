@@ -61,7 +61,7 @@ public sealed class VisionWorker(
         while (true)
         {
             await queue.WaitForItemAsync(ct);
-            if (activity.IsPaused)
+            if (activity.IsStopped)
             {
                 inBatch = false;
                 await vision.ReleaseModelAsync(ct);

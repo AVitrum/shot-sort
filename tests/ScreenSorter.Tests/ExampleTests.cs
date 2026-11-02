@@ -70,7 +70,7 @@ public sealed class CorrectionProcessorTests : IDisposable
             ReviewFolder = "_Review",
             DatabasePath = Path.Combine(_temp.Path, "db", "test.db"),
         });
-        _log = new SqliteDecisionLog(paths);
+        _log = new SqliteDecisionLog(paths, Opt(new PrivacyOptions()));
         _files = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
         _processor = new CorrectionProcessor(_files, _log, _embedder, _examples, paths, Opt(_corrections), TimeProvider.System, NullLogger<CorrectionProcessor>.Instance);
     }

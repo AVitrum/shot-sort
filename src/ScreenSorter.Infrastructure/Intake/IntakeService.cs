@@ -71,9 +71,14 @@ public sealed class IntakeService(
 
     private void StartWatcher(string folder)
     {
-        if (!Directory.Exists(folder))
+        try
         {
-            logger.LogWarning("Watch folder {Folder} does not exist; skipped", folder);
+            // Windows creates the screenshots folder only at the first snip, and that snip must be seen too.
+            Directory.CreateDirectory(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            logger.LogWarning(ex, "Watch folder {Folder} cannot be used; skipped", folder);
             return;
         }
 

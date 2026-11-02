@@ -33,6 +33,9 @@
 ├─ Code/
 └─ _Review/   screenshots it could not place</TextBlock>
                 </Border>
+                <local:IconRow x:Name="WaitingRow" Margin="0,8,0,4"
+                                        Glyph="&#xE769;" Title="Nothing moves until you close this guide"
+                                        Text="Sorting starts when you finish here. To change something first, use Open settings on the last step." />
                 <local:IconRow x:Name="WatchingRow" Margin="0,8,0,12"
                                         Glyph="&#xE8B7;" Title="Watching" />
                 <local:IconRow x:Name="BacklogRow"
@@ -74,11 +77,13 @@
                                         Text="Handles waiting files right away instead of waiting for your PC to be idle." />
                 <local:IconRow Glyph="&#xE8B7;" Title="Open review folder"
                                         Text="Shows the screenshots that need a decision from you." />
+                <local:IconRow Glyph="&#xE81C;" Title="History"
+                                        Text="Shows where each screenshot went and why, and lets you undo a move." />
                 <Border Style="{StaticResource Card}" Margin="0,6,0,0">
                     <StackPanel>
                         <TextBlock Style="{StaticResource Heading}" Text="Two optional helpers" Margin="0,0,0,2" />
                         <TextBlock Style="{StaticResource Hint}"
-                                   Text="App rules work on their own. Learning from examples needs Qdrant running in Docker, and the vision model needs LM Studio with its server on. ScreenSorter does not start them for you." />
+                                   Text="App rules work on their own. Learning from examples needs Qdrant running in Docker, and the vision model needs LM Studio with its server on. ScreenSorter does not start them for you, but Status in the tray menu shows whether they run and how to start them." />
                     </StackPanel>
                 </Border>
             </StackPanel>

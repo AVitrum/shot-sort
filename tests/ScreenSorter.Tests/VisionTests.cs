@@ -146,6 +146,98 @@ public class LmStudioVisionClientTests : IDisposable
             Client(new StubHandler(new HttpRequestException("refused")))
                 .ClassifyAsync(_temp.File("a.png"), null, CancellationToken.None));
 
+    private const string Answer = "{\"category\":\"Browser\",\"game_title\":\"\",\"app_name\":\"\",\"confidence\":0.9}";
+
+    private static string Finished(string content, string reason) =>
+        new JsonObject
+        {
+            ["choices"] = new JsonArray(new JsonObject
+            {
+                ["message"] = new JsonObject { ["content"] = content },
+                ["finish_reason"] = reason,
+            }),
+        }.ToJsonString();
+
+    private async Task<(VisionResult? Result, List<int> Limits)> ClassifyWithReplies(int retryTokens, params string[] replies)
+    {
+        var handler = new RecordingHandler(replies);
+        var client = new LmStudioVisionClient(new HttpClient(handler), new WicImageInspector(), new FixedCatalog("Deadlock"),
+            Opt(new LmStudioOptions
+            {
+                BaseUrl = "http://localhost:1234/v1/",
+                ManagementUrl = "http://localhost:1234/api/v1",
+                Model = "m",
+                MaxTokens = 1024,
+                RetryMaxTokens = retryTokens,
+                TimeoutSeconds = 5,
+                Categories = SortPipelineTests.LmStudio().Categories,
+            }),
+            NullLogger<LmStudioVisionClient>.Instance);
+        var result = await client.ClassifyAsync(_temp.File("a.png"), null, CancellationToken.None);
+        return (result, handler.Limits);
+    }
+
+    [Fact]
+    public async Task Classify_RanOutOfTokens_AsksOnceMoreWithTheLargerLimit()
+    {
+        var (result, limits) = await ClassifyWithReplies(4096, Finished("", "length"), Finished(Answer, "stop"));
+
+        Assert.Equal("Browser", result?.Category);
+        Assert.Equal([1024, 4096], limits);
+    }
+
+    [Fact]
+    public async Task Classify_StillOutOfTokens_GivesUpAfterTheSecondTry()
+    {
+        var (result, limits) = await ClassifyWithReplies(4096, Finished("", "length"), Finished("", "length"));
+
+        Assert.Null(result);
+        Assert.Equal([1024, 4096], limits);
+    }
+
+    [Fact]
+    public async Task Classify_FirstAnswerFits_AsksOnlyOnce()
+    {
+        var (result, limits) = await ClassifyWithReplies(4096, Finished(Answer, "stop"));
+
+        Assert.Equal("Browser", result?.Category);
+        Assert.Equal([1024], limits);
+    }
+
+    [Fact]
+    public async Task Classify_EmptyForAnotherReason_DoesNotRetry()
+    {
+        var (result, limits) = await ClassifyWithReplies(4096, Finished("", "stop"));
+
+        Assert.Null(result);
+        Assert.Equal([1024], limits);
+    }
+
+    [Fact]
+    public async Task Classify_RetryNotAboveTheLimit_DoesNotRetry()
+    {
+        var (_, limits) = await ClassifyWithReplies(1024, Finished("", "length"));
+
+        Assert.Equal([1024], limits);
+    }
+
+    private sealed class RecordingHandler(params string[] replies) : HttpMessageHandler
+    {
+        private int _next;
+
+        public List<int> Limits { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            // Model-list requests belong to ejecting, not to the answer.
+            if (request.Method != HttpMethod.Post)
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+            Limits.Add(body["max_tokens"]!.GetValue<int>());
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(replies[_next++], Encoding.UTF8, "application/json") };
+        }
+    }
+
     private static string Completion(string content) =>
         new JsonObject { ["choices"] = new JsonArray(new JsonObject { ["message"] = new JsonObject { ["content"] = content } }) }
             .ToJsonString();

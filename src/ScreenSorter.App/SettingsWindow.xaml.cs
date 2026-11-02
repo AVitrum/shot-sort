@@ -33,6 +33,15 @@ public partial class SettingsWindow : Window
     /// <summary>Raised when the user asks for the guide.</summary>
     public event EventHandler? GuideRequested;
 
+    /// <summary>Raised when the user asks to erase stored window titles. This acts at once; it is not part of saving.</summary>
+    public event EventHandler? EraseWindowTitlesRequested;
+
+    /// <summary>Shows the outcome of erasing window titles.</summary>
+    /// <param name="message">One short sentence.</param>
+    public void ShowEraseResult(string message) => EraseMessage.Text = message;
+
+    private void OnEraseWindowTitles(object sender, RoutedEventArgs e) => EraseWindowTitlesRequested?.Invoke(this, EventArgs.Empty);
+
     private void OnOpenGuide(object sender, RoutedEventArgs e) => GuideRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnSave(object sender, RoutedEventArgs e)

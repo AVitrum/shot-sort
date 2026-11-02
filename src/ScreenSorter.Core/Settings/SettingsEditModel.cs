@@ -106,6 +106,12 @@ public sealed class SettingsEditModel
     /// <summary>Vision model name in LM Studio.</summary>
     public string LmStudioModel { get; set; } = "";
 
+    /// <summary>Days window titles and program paths are kept; 0 means they are not stored.</summary>
+    public string WindowTitleDays { get; set; } = "";
+
+    /// <summary>Days log files are kept.</summary>
+    public string LogDays { get; set; } = "";
+
     /// <summary>Fills a model from the settings in effect.</summary>
     /// <param name="paths">Folder settings.</param>
     /// <param name="rules">Rule settings.</param>
@@ -116,10 +122,11 @@ public sealed class SettingsEditModel
     /// <param name="backlog">Backlog settings.</param>
     /// <param name="notifications">Notification settings.</param>
     /// <param name="corrections">Correction settings.</param>
+    /// <param name="privacy">Retention settings.</param>
     /// <returns>A model holding copies of the values.</returns>
     public static SettingsEditModel From(PathsOptions paths, RulesOptions rules, GameCatalogOptions catalog,
         ThresholdsOptions thresholds, IdleOptions idle, LmStudioOptions lmStudio, BacklogOptions backlog,
-        NotificationsOptions notifications, CorrectionsOptions corrections)
+        NotificationsOptions notifications, CorrectionsOptions corrections, PrivacyOptions privacy)
     {
         var model = new SettingsEditModel
         {
@@ -138,6 +145,8 @@ public sealed class SettingsEditModel
             SkipWhenFullscreen = idle.SkipWhenFullscreen,
             LmStudioUrl = lmStudio.BaseUrl,
             LmStudioModel = lmStudio.Model,
+            WindowTitleDays = privacy.WindowTitleDays.ToString(CultureInfo.InvariantCulture),
+            LogDays = privacy.LogDays.ToString(CultureInfo.InvariantCulture),
         };
         foreach (var folder in paths.WatchFolders)
             model.WatchFolders.Add(folder);
@@ -195,6 +204,8 @@ public sealed class SettingsEditModel
         CheckRange(problems, VisionConfidence, "Vision confidence", 0, 1);
         CheckRange(problems, NoInputMinutes, "Minutes without input", 0, 1440);
         CheckRange(problems, MaxGpuUtilPercent, "Maximum GPU load", 0, 100);
+        CheckRange(problems, WindowTitleDays, "Days to keep window titles", 0, 3650);
+        CheckRange(problems, LogDays, "Days to keep logs", 1, 3650);
 
         if (!Uri.TryCreate(LmStudioUrl?.Trim(), UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
             problems.Add("The LM Studio URL must look like http://localhost:1234/v1.");
@@ -259,6 +270,11 @@ public sealed class SettingsEditModel
                 [nameof(LmStudioOptions.ManagementUrl)] = $"{url.Scheme}://{url.Authority}/api/v1",
                 [nameof(LmStudioOptions.Model)] = LmStudioModel.Trim(),
                 [nameof(LmStudioOptions.Categories)] = categories,
+            },
+            [PrivacyOptions.Section] = new JsonObject
+            {
+                [nameof(PrivacyOptions.WindowTitleDays)] = (int)Math.Round(Number(WindowTitleDays)),
+                [nameof(PrivacyOptions.LogDays)] = (int)Math.Round(Number(LogDays)),
             },
         };
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });

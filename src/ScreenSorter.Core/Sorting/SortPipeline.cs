@@ -18,7 +18,8 @@ namespace ScreenSorter.Core.Sorting;
 /// Files without focus history (backlog) skip the rules and are judged by image content alone; with
 /// <see cref="BacklogOptions.Enabled"/> off they are left in place as <see cref="SortOutcomeKind.Deferred"/>.
 /// Files that neither rules nor examples can place, or where the two disagree, stay in place and
-/// are returned as <see cref="SortOutcomeKind.Queued"/> for the vision queue.
+/// are returned as <see cref="SortOutcomeKind.Queued"/> for the vision queue. A file whose move the user undid stays
+/// where it is, also as <see cref="SortOutcomeKind.Deferred"/>.
 /// </remarks>
 public sealed class SortPipeline(
     IScreenshotStore store,
@@ -59,12 +60,18 @@ public sealed class SortPipeline(
                 return new SortOutcome(SortOutcomeKind.Deferred, path);
             }
 
+            if (await log.FindLatestByHashAsync(await store.ComputeHashAsync(path, ct), ct) is { Classification.Stage: DecisionStage.Undone })
+            {
+                logger.LogDebug("Left {Path} alone: the user undid its move", path);
+                return new SortOutcome(SortOutcomeKind.Deferred, path);
+            }
+
             if (IsBlank(path))
                 return await ActAsync(path, Classification.Review(_paths.ReviewFolder, DecisionStage.ImageCheck), snapshot, ct);
 
             var rule = snapshot is null ? null : rules.Classify(snapshot);
             var example = await TryExamplesAsync(path, ct);
-            if (rule is not null && (example is null || SameFolder(rule, example)))
+            if (rule is not null && (example is null || SameFolder(rule, example) || example.Confidence < thresholds.Value.ExampleConflictSimilarity))
                 return await ActAsync(path, rule, snapshot, ct);
             if (rule is null && example is not null)
                 return await ActAsync(path, example, snapshot, ct);

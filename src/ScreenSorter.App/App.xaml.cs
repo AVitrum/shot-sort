@@ -8,9 +8,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ScreenSorter.Core.Configuration;
 using ScreenSorter.Core.Settings;
+using ScreenSorter.Core.Sorting;
 using ScreenSorter.Infrastructure;
 using ScreenSorter.Infrastructure.Files;
 using ScreenSorter.Infrastructure.Logging;
+using ScreenSorter.Infrastructure.Status;
 using ScreenSorter.Infrastructure.Win32;
 
 namespace ScreenSorter.App;
@@ -31,6 +33,8 @@ public partial class App : Application
     private TrayIcon? _tray;
     private SettingsWindow? _settings;
     private GuideWindow? _guide;
+    private ActivityWindow? _activityWindow;
+    private bool _firstRun;
 
     /// <summary>Starts the host and the tray icon; exits if another instance keeps running.</summary>
     /// <param name="e">Command-line arguments; <c>--Section:Key=value</c> overrides configuration.</param>
@@ -47,6 +51,7 @@ public partial class App : Application
 
         try
         {
+            ScreenshotsFolder.PublishEnvironmentVariable();
             // Content root = exe folder: at login the working directory is not the app folder.
             var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
             {
@@ -64,15 +69,24 @@ public partial class App : Application
             _host = builder.Build();
             if (settingsProblem is not null)
                 _host.Services.GetRequiredService<ILogger<App>>().LogWarning("{Problem}", settingsProblem);
+            // Set before the services start: intake sorts what is already in the folder as soon as it runs.
+            _firstRun = !GuideMarker.IsSet(paths);
+            if (_firstRun)
+                _host.Services.GetRequiredService<SortActivity>().Hold();
             await _host.StartAsync();
             _tray = _host.Services.GetRequiredService<TrayIcon>();
             _tray.ExitRequested += async (_, _) => await ExitAsync(restart: false);
             _tray.SettingsRequested += (_, _) => OpenSettings();
             _tray.GuideRequested += (_, _) => OpenGuide();
+            _tray.StatusRequested += (_, _) => OpenActivity().ShowStatusPage();
+            _tray.HistoryRequested += (_, _) => OpenActivity().ShowHistoryPage();
 
-            ShowGuideOnFirstRun();
+            if (_firstRun)
+                OpenGuide();
             if (builder.Configuration.GetValue<bool>("Ui:OpenSettingsOnStart"))
                 OpenSettings();
+            if (builder.Configuration.GetValue<bool>("Ui:OpenActivityOnStart"))
+                OpenActivity();
         }
         catch (Exception ex)
         {
@@ -101,20 +115,26 @@ public partial class App : Application
         return true;
     }
 
-    private void ShowGuideOnFirstRun()
+    // The guide's "Open settings" closes the guide, and the user may be about to turn off sorting of existing
+    // screenshots, so the hold lasts until both windows are gone.
+    private void FinishFirstRunIfDone()
     {
-        var paths = _host!.Services.GetRequiredService<IOptions<PathsOptions>>().Value;
-        if (GuideMarker.IsSet(paths))
+        if (!_firstRun || _guide is not null || _settings is not null)
             return;
+        _firstRun = false;
+        RememberGuideSeen();
+        _host!.Services.GetRequiredService<SortActivity>().ReleaseHold();
+    }
 
-        OpenGuide();
+    private void RememberGuideSeen()
+    {
         try
         {
-            GuideMarker.Set(paths);
+            GuideMarker.Set(_host!.Services.GetRequiredService<IOptions<PathsOptions>>().Value);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _host.Services.GetRequiredService<ILogger<App>>().LogWarning(ex, "Could not record that the guide was shown");
+            _host!.Services.GetRequiredService<ILogger<App>>().LogWarning(ex, "Could not record that the guide was shown");
         }
     }
 
@@ -131,10 +151,35 @@ public partial class App : Application
         _guide = new GuideWindow(
             paths.WatchFolders.Select(PathsOptions.Expand),
             paths.ReviewFolder,
-            services.GetRequiredService<IOptions<BacklogOptions>>().Value.Enabled);
-        _guide.Closed += (_, _) => _guide = null;
+            services.GetRequiredService<IOptions<BacklogOptions>>().Value.Enabled,
+            services.GetRequiredService<SortActivity>().IsHeld);
+        _guide.Closed += (_, _) =>
+        {
+            _guide = null;
+            FinishFirstRunIfDone();
+        };
         _guide.SettingsRequested += (_, _) => OpenSettings();
         _guide.Show();
+    }
+
+    private ActivityWindow OpenActivity()
+    {
+        if (_activityWindow is not null)
+        {
+            _activityWindow.Activate();
+            return _activityWindow;
+        }
+
+        var services = _host!.Services;
+        _activityWindow = new ActivityWindow(
+            services.GetRequiredService<StatusMonitor>(),
+            services.GetRequiredService<DecisionHistory>(),
+            services.GetRequiredService<IDecisionLog>(),
+            services.GetRequiredService<IOptions<PathsOptions>>(),
+            services.GetRequiredService<IOptions<CorrectionsOptions>>());
+        _activityWindow.Closed += (_, _) => _activityWindow = null;
+        _activityWindow.Show();
+        return _activityWindow;
     }
 
     private void OpenSettings()
@@ -155,14 +200,34 @@ public partial class App : Application
             services.GetRequiredService<IOptions<LmStudioOptions>>().Value,
             services.GetRequiredService<IOptions<BacklogOptions>>().Value,
             services.GetRequiredService<IOptions<NotificationsOptions>>().Value,
-            services.GetRequiredService<IOptions<CorrectionsOptions>>().Value);
+            services.GetRequiredService<IOptions<CorrectionsOptions>>().Value,
+            services.GetRequiredService<IOptions<PrivacyOptions>>().Value);
 
         var wasEnabled = _runAtLogin.IsEnabled;
         _settings = new SettingsWindow(model, wasEnabled);
-        _settings.Closed += (_, _) => _settings = null;
+        _settings.Closed += (_, _) =>
+        {
+            _settings = null;
+            FinishFirstRunIfDone();
+        };
         _settings.GuideRequested += (_, _) => OpenGuide();
+        _settings.EraseWindowTitlesRequested += async (_, _) => await EraseWindowTitlesAsync();
         _settings.SaveRequested += async (_, _) => await SaveSettingsAsync(model, wasEnabled);
         _settings.Show();
+    }
+
+    private async Task EraseWindowTitlesAsync()
+    {
+        try
+        {
+            var erased = await _host!.Services.GetRequiredService<IDecisionLog>().EraseFocusDetailsAsync(DateTimeOffset.MaxValue, CancellationToken.None);
+            _settings?.ShowEraseResult(erased == 1 ? "Erased from 1 record." : $"Erased from {erased} records.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            _host!.Services.GetRequiredService<ILogger<App>>().LogWarning(ex, "Could not erase window titles");
+            _settings?.ShowEraseResult("That did not work. See the log.");
+        }
     }
 
     private async Task SaveSettingsAsync(SettingsEditModel model, bool wasEnabled)
@@ -180,6 +245,13 @@ public partial class App : Application
             return;
         }
 
+        // Sorting must wait for the restart: only then do the saved settings apply. The restarted app does not
+        // ask again, because the user has seen the guide and made their choices.
+        if (_firstRun)
+        {
+            _firstRun = false;
+            RememberGuideSeen();
+        }
         _settings!.Close();
         await ExitAsync(restart: true);
     }

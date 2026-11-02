@@ -20,4 +20,7 @@ public enum DecisionStage
 
     /// <summary>The image is black or near-uniform (failed fullscreen capture); sent to review.</summary>
     ImageCheck,
+
+    /// <summary>The user undid the app's move. The file is left alone until the user moves it themselves.</summary>
+    Undone,
 }
