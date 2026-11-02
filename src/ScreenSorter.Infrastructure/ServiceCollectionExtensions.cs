@@ -87,6 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ExampleClassifier>();
         services.AddSingleton<CorrectionProcessor>();
         services.AddSingleton<SortPipeline>();
+        services.AddSingleton<DecisionHistory>();
 
         // Registered in display order.
         services.AddSingleton<IServiceProbe, SortingProbe>();

@@ -72,6 +72,20 @@ public sealed class SortPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task Process_LeavesAFileAloneAfterAnUndo()
+    {
+        FocusOn("Discord.exe");
+        var file = _temp.File("Screenshot 2026-10-31 210412.png");
+        var hash = await new FileSystemScreenshotStore(Opt(new IntakeOptions()), TimeProvider.System).ComputeHashAsync(file, CancellationToken.None);
+        await _log.RecordAsync(new SortRecord("was", file, hash, new Classification("", null, "", 0, DecisionStage.Undone), null, DateTimeOffset.UtcNow), CancellationToken.None);
+
+        var outcome = await _pipeline.ProcessAsync(file, CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Deferred, outcome.Kind);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
     public async Task Process_NameCollision_AddsSuffix()
     {
         FocusOn("Code.exe");

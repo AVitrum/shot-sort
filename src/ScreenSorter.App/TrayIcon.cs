@@ -47,6 +47,7 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add("Open review folder", null, (_, _) => OpenFolder(ReviewFolder));
         menu.Items.Add("Open screenshots folder", null, (_, _) => OpenFolder(PathsOptions.Expand(_paths.SortedRoot)));
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("History", null, (_, _) => HistoryRequested?.Invoke(this, EventArgs.Empty));
         menu.Items.Add("Status", null, (_, _) => StatusRequested?.Invoke(this, EventArgs.Empty));
         menu.Items.Add("How it works", null, (_, _) => GuideRequested?.Invoke(this, EventArgs.Empty));
         menu.Items.Add("Settings...", null, (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty));
@@ -69,6 +70,9 @@ public sealed class TrayIcon : IDisposable
         _status.AttentionNeeded += OnAttentionNeeded;
         UpdateStateText();
     }
+
+    /// <summary>Raised on the UI thread when the user picks "History".</summary>
+    public event EventHandler? HistoryRequested;
 
     /// <summary>Raised on the UI thread when the user picks "Status" or clicks a notification about a helper.</summary>
     public event EventHandler? StatusRequested;

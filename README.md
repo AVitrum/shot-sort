@@ -42,9 +42,11 @@ A tray icon appears; it may be hidden under the **^** arrow in the taskbar. A sh
 
 This app moves and renames files in your screenshots folder, **including screenshots that are already there**: those are sorted by image content. To keep them where they are, use **Open settings** on the guide's last step and untick the option.
 
-Right-click the tray icon for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, Status, How it works, Settings and Exit. Double-click it for Settings.
+Right-click the tray icon for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, History, Status, How it works, Settings and Exit. Double-click it for Settings.
 
 **Status** shows whether LM Studio and Qdrant are running, how to start them, and how many screenshots wait and why. If a helper stops while it is needed, a notification tells you once.
+
+**History** lists where each screenshot went and why, with a preview. You can undo the app's move, which puts the file back and leaves it alone until you move it yourself, or send it to another folder, which teaches the app just like dragging it. **Accuracy** counts how often you moved what each stage placed, and which folders get mixed up most.
 
 Uninstalling from Windows Settings removes the app and leaves your screenshots and `%LOCALAPPDATA%\ScreenSorter` in place.
 
@@ -105,7 +107,6 @@ The app reads window titles, process paths, and Steam and Epic install data. Its
 ## Current limits
 
 - The app does not start LM Studio's server or Qdrant. After a reboot, files that need them wait until they are running; **Status** shows this.
-- There is no undo. Every move is recorded in the decision log, and you can drag a file back by hand.
 - The vision model can pick the wrong game from your known games. Moving the file to the right folder teaches the app.
 - Images only, no videos.
 

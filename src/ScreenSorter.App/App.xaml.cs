@@ -79,6 +79,7 @@ public partial class App : Application
             _tray.SettingsRequested += (_, _) => OpenSettings();
             _tray.GuideRequested += (_, _) => OpenGuide();
             _tray.StatusRequested += (_, _) => OpenActivity().ShowStatusPage();
+            _tray.HistoryRequested += (_, _) => OpenActivity().ShowHistoryPage();
 
             if (_firstRun)
                 OpenGuide();
@@ -169,7 +170,13 @@ public partial class App : Application
             return _activityWindow;
         }
 
-        _activityWindow = new ActivityWindow(_host!.Services.GetRequiredService<StatusMonitor>());
+        var services = _host!.Services;
+        _activityWindow = new ActivityWindow(
+            services.GetRequiredService<StatusMonitor>(),
+            services.GetRequiredService<DecisionHistory>(),
+            services.GetRequiredService<IDecisionLog>(),
+            services.GetRequiredService<IOptions<PathsOptions>>(),
+            services.GetRequiredService<IOptions<CorrectionsOptions>>());
         _activityWindow.Closed += (_, _) => _activityWindow = null;
         _activityWindow.Show();
         return _activityWindow;
