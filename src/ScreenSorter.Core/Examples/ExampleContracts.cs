@@ -22,6 +22,12 @@ public interface IExampleStore
     /// <exception cref="ExamplesUnavailableException">The store cannot be reached.</exception>
     Task<long> CountAsync(CancellationToken ct);
 
+    /// <summary>Lists which files have an example.</summary>
+    /// <param name="ct">Cancels the request.</param>
+    /// <returns>Lower-case hex SHA-256 of each stored file.</returns>
+    /// <exception cref="ExamplesUnavailableException">The store cannot be reached.</exception>
+    Task<IReadOnlySet<string>> ListFileHashesAsync(CancellationToken ct);
+
     /// <summary>Adds an example, or replaces the one with the same <see cref="Example.FileHash"/>. Creates the collection if needed.</summary>
     /// <param name="example">The label and its source.</param>
     /// <param name="vector">The image embedding.</param>
@@ -62,7 +68,7 @@ public sealed record Example(string FileHash, string Category, string? SubFolder
 /// <param name="SubFolder">The example's second-level folder, or <see langword="null"/>.</param>
 public sealed record ExampleHit(double Score, string Category, string? SubFolder);
 
-/// <summary>The example stage cannot run right now (model missing, Qdrant down). Rules and the vision model still work.</summary>
+/// <summary>The example stage cannot run right now (model missing, database error). Rules and the vision model still work.</summary>
 /// <param name="message">What failed.</param>
 /// <param name="inner">The underlying error.</param>
 public sealed class ExamplesUnavailableException(string message, Exception? inner = null) : Exception(message, inner);

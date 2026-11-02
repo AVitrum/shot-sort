@@ -41,7 +41,7 @@ public sealed class SortPipelineTests : IDisposable
         var thresholds = Opt(new ThresholdsOptions());
         var store = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
         _log = new SqliteDecisionLog(paths, Opt(new PrivacyOptions()));
-        var examples = new ExampleClassifier(_embedder, _examples, Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
+        var examples = new ExampleClassifier(_embedder, _examples, Opt(new ExamplesOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
         _pipeline = new SortPipeline(store, _focus,
             new RulesEngine(rules, new GameDetector(rules, new NoTitles(), new FixedCatalog())), examples, new WicImageInspector(), _vision,
             new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, Opt(_backlog), TimeProvider.System,

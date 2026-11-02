@@ -109,38 +109,25 @@ public class LmStudioProbeTests
     }
 }
 
-public class QdrantProbeTests
+public class ExampleStoreProbeTests
 {
     [Fact]
-    public async Task Running_ReportsTheCount()
+    public async Task Readable_ReportsTheCount()
     {
-        var check = await new QdrantProbe(new Store { Count = 3 }).CheckAsync(CancellationToken.None);
+        var check = await new ExampleStoreProbe(new Store { Count = 3 }).CheckAsync(CancellationToken.None);
 
         Assert.Equal(ServiceState.Ok, check.State);
         Assert.Contains("3 examples", check.Detail);
     }
 
     [Fact]
-    public async Task NeverSeenRunning_IsAProblemButNotNews()
+    public async Task Unreadable_IsNews()
     {
-        var check = await new QdrantProbe(new Store { Down = true }).CheckAsync(CancellationToken.None);
+        var check = await new ExampleStoreProbe(new Store { Down = true }).CheckAsync(CancellationToken.None);
 
         Assert.Equal(ServiceState.Problem, check.State);
-        Assert.False(check.NeedsAttention);
-        Assert.Contains("docker compose", check.FixCommand);
-        Assert.Contains("docker-compose.yml", check.FixCommand);
-    }
-
-    [Fact]
-    public async Task StoppedAfterRunning_IsNews()
-    {
-        var store = new Store();
-        var probe = new QdrantProbe(store);
-        await probe.CheckAsync(CancellationToken.None);
-
-        store.Down = true;
-
-        Assert.True((await probe.CheckAsync(CancellationToken.None)).NeedsAttention);
+        Assert.True(check.NeedsAttention);
+        Assert.Null(check.FixCommand);
     }
 
     private sealed class Store : IExampleStore
@@ -149,6 +136,7 @@ public class QdrantProbeTests
         public bool Down { get; set; }
 
         public Task<long> CountAsync(CancellationToken ct) => Down ? throw new ExamplesUnavailableException("down") : Task.FromResult(Count);
+        public Task<IReadOnlySet<string>> ListFileHashesAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task UpsertAsync(Example example, float[] vector, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(string fileHash, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<ExampleHit>> SearchAsync(float[] vector, int limit, CancellationToken ct) => throw new NotSupportedException();

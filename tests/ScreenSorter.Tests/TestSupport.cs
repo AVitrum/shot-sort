@@ -102,6 +102,12 @@ internal sealed class FakeExampleStore : ScreenSorter.Core.Examples.IExampleStor
 
     public Task<long> CountAsync(CancellationToken ct) { Fail(); return Task.FromResult((long)Hits.Count); }
 
+    public Task<IReadOnlySet<string>> ListFileHashesAsync(CancellationToken ct)
+    {
+        Fail();
+        return Task.FromResult<IReadOnlySet<string>>(Stored.Keys.ToHashSet());
+    }
+
     public Task UpsertAsync(ScreenSorter.Core.Examples.Example example, float[] vector, CancellationToken ct)
     {
         Fail();

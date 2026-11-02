@@ -177,7 +177,7 @@ public sealed class VisionWorkerEjectTests : IDisposable
         var store = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50, StabilityTimeoutSeconds = 5 }), TimeProvider.System);
         var pipeline = new SortPipeline(store, new FocusHistory(Opt(new FocusOptions()), new FakeTime(T0)),
             new RulesEngine(rules, new GameDetector(rules, new FixedTitles(), new FixedCatalog())),
-            new ExampleClassifier(new FakeEmbedder(), new FakeExampleStore(), Opt(new QdrantOptions()), thresholds, NullLogger<ExampleClassifier>.Instance),
+            new ExampleClassifier(new FakeEmbedder(), new FakeExampleStore(), Opt(new ExamplesOptions()), thresholds, NullLogger<ExampleClassifier>.Instance),
             new WicImageInspector(), _vision, new VisionMapper(lmStudio, rules, thresholds, paths, new FixedCatalog()),
             new SqliteDecisionLog(paths, Opt(new PrivacyOptions())), paths, thresholds, Opt(new BacklogOptions()), TimeProvider.System, NullLogger<SortPipeline>.Instance);
         _worker = new VisionWorker(_queue, pipeline, _vision,

@@ -87,11 +87,10 @@ public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IOptions<L
     }
 }
 
-/// <summary>Checks that Qdrant answers and reports how many examples it holds.</summary>
-public sealed class QdrantProbe(IExampleStore store) : IServiceProbe
+/// <summary>Reports how many examples the store holds, and whether it can be read.</summary>
+public sealed class ExampleStoreProbe(IExampleStore store) : IServiceProbe
 {
-    private const string Name = "Qdrant";
-    private bool _wasRunning;
+    private const string Name = "Examples";
 
     /// <inheritdoc />
     public async Task<ServiceCheck> CheckAsync(CancellationToken ct)
@@ -99,16 +98,14 @@ public sealed class QdrantProbe(IExampleStore store) : IServiceProbe
         try
         {
             var count = await store.CountAsync(ct);
-            _wasRunning = true;
-            return new ServiceCheck(Name, ServiceState.Ok, count == 1 ? "Running, with 1 example learned." : $"Running, with {count} examples learned.");
+            return new ServiceCheck(Name, ServiceState.Ok, count == 1 ? "1 example learned." : $"{count} examples learned.");
         }
         catch (ExamplesUnavailableException)
         {
-            var compose = Path.Combine(AppContext.BaseDirectory, "docker-compose.yml");
             return new ServiceCheck(Name, ServiceState.Problem,
-                "Not running. Sorting goes on, but examples are not used and files you move are learned later.",
-                "Start Docker Desktop, then run this command.", $"docker compose -f \"{compose}\" up -d",
-                NeedsAttention: _wasRunning);
+                "The database cannot be read. Sorting goes on, but examples are not used and files you move are learned later.",
+                "Restart the app. If this stays, check that the disk with your user profile has free space.",
+                NeedsAttention: true);
         }
     }
 }

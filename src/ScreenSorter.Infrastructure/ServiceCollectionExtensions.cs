@@ -17,7 +17,6 @@ using ScreenSorter.Infrastructure.Files;
 using ScreenSorter.Infrastructure.Games;
 using ScreenSorter.Infrastructure.Imaging;
 using ScreenSorter.Infrastructure.Intake;
-using ScreenSorter.Infrastructure.Qdrant;
 using ScreenSorter.Infrastructure.Status;
 using ScreenSorter.Infrastructure.Vision;
 using ScreenSorter.Infrastructure.Storage;
@@ -46,7 +45,7 @@ public static class ServiceCollectionExtensions
         services.Configure<IdleOptions>(configuration.GetSection(IdleOptions.Section));
         services.Configure<GameCatalogOptions>(configuration.GetSection(GameCatalogOptions.Section));
         services.Configure<ClipOptions>(configuration.GetSection(ClipOptions.Section));
-        services.Configure<QdrantOptions>(configuration.GetSection(QdrantOptions.Section));
+        services.Configure<ExamplesOptions>(configuration.GetSection(ExamplesOptions.Section));
         services.Configure<CorrectionsOptions>(configuration.GetSection(CorrectionsOptions.Section));
         services.Configure<BacklogOptions>(configuration.GetSection(BacklogOptions.Section));
         services.Configure<NotificationsOptions>(configuration.GetSection(NotificationsOptions.Section));
@@ -81,12 +80,10 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IOptions<ClipOptions>>(),
             sp.GetRequiredService<ILogger<ClipModelFile>>()));
         services.AddSingleton<IImageEmbedder, ClipImageEmbedder>();
-        services.AddSingleton<IExampleStore>(sp => new QdrantExampleStore(
-            new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
-            sp.GetRequiredService<IOptions<QdrantOptions>>(),
-            sp.GetRequiredService<IOptions<ClipOptions>>()));
+        services.AddSingleton<IExampleStore, SqliteExampleStore>();
         services.AddSingleton<ExampleClassifier>();
         services.AddSingleton<CorrectionProcessor>();
+        services.AddSingleton<ExampleRebuilder>();
         services.AddSingleton<SortPipeline>();
         services.AddSingleton<DecisionHistory>();
 
@@ -97,7 +94,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<VisionQueue>(),
             sp.GetRequiredService<IOptions<LmStudioOptions>>(),
             sp.GetRequiredService<IOptions<StatusOptions>>()));
-        services.AddSingleton<IServiceProbe, QdrantProbe>();
+        services.AddSingleton<IServiceProbe, ExampleStoreProbe>();
         services.AddSingleton<IServiceProbe, ClipModelProbe>();
         services.AddSingleton<IServiceProbe, WatchFolderProbe>();
         services.AddSingleton<StatusMonitor>();

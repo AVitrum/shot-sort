@@ -42,7 +42,6 @@ models/*
 *.gguf
 *.safetensors
 *.part
-qdrant_storage/
 
 # --- .NET build output ---
 [Bb]in/
