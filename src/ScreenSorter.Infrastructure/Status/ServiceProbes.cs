@@ -9,6 +9,7 @@ using ScreenSorter.Core.Sorting;
 using ScreenSorter.Core.Status;
 using ScreenSorter.Core.Vision;
 using ScreenSorter.Infrastructure.Clip;
+using ScreenSorter.Infrastructure.Updates;
 
 namespace ScreenSorter.Infrastructure.Status;
 
@@ -123,6 +124,21 @@ public sealed class ClipModelProbe(ClipModelFile model) : IServiceProbe
     public Task<ServiceCheck> CheckAsync(CancellationToken ct) => Task.FromResult(model.ReadyPath is null
         ? new ServiceCheck("Image model", ServiceState.Waiting, "Being checked or downloaded. Examples are used once it is ready.")
         : new ServiceCheck("Image model", ServiceState.Ok, "Ready."));
+}
+
+/// <summary>Reports this copy's version and what the updater is doing.</summary>
+public sealed class UpdateProbe(UpdateService updates, IOptions<UpdatesOptions> options) : IServiceProbe
+{
+    /// <inheritdoc />
+    public Task<ServiceCheck> CheckAsync(CancellationToken ct)
+    {
+        var version = $"Version {UpdateService.CurrentVersion.ToString(3)}.";
+        var detail = !options.Value.Enabled ? $"{version} Automatic updates are off."
+            : !updates.IsActive ? $"{version} This copy was not installed, so it does not update itself."
+            : updates.WaitingVersion is { } waiting ? $"{version} Version {waiting} is ready and installs when the PC is idle."
+            : $"{version} New versions install by themselves.";
+        return Task.FromResult(new ServiceCheck("Updates", ServiceState.Ok, detail));
+    }
 }
 
 /// <summary>Checks that the watch folders exist.</summary>

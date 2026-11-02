@@ -83,6 +83,13 @@
                                         <TextBlock Style="{StaticResource Hint}" Text="Says how many were sorted and how many need review." />
                                     </StackPanel>
                                 </CheckBox>
+                                <CheckBox IsChecked="{Binding UpdatesEnabled}" Margin="0,0,0,12"
+                                          AutomationProperties.Name="Install new versions automatically">
+                                    <StackPanel>
+                                        <TextBlock Text="Install new versions automatically" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="Asks GitHub once a day whether there is a new version. It installs when the PC is idle, and nothing is sent except that request." />
+                                    </StackPanel>
+                                </CheckBox>
                                 <CheckBox x:Name="StartWithWindowsBox" AutomationProperties.Name="Start with Windows">
                                     <StackPanel>
                                         <TextBlock Text="Start with Windows" />

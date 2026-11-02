@@ -20,6 +20,7 @@ using ScreenSorter.Infrastructure.Intake;
 using ScreenSorter.Infrastructure.Status;
 using ScreenSorter.Infrastructure.Vision;
 using ScreenSorter.Infrastructure.Storage;
+using ScreenSorter.Infrastructure.Updates;
 using ScreenSorter.Infrastructure.Win32;
 
 namespace ScreenSorter.Infrastructure;
@@ -51,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.Configure<NotificationsOptions>(configuration.GetSection(NotificationsOptions.Section));
         services.Configure<StatusOptions>(configuration.GetSection(StatusOptions.Section));
         services.Configure<PrivacyOptions>(configuration.GetSection(PrivacyOptions.Section));
+        services.Configure<UpdatesOptions>(configuration.GetSection(UpdatesOptions.Section));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SortActivity>();
@@ -87,6 +89,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ExampleRebuilder>();
         services.AddSingleton<SortPipeline>();
         services.AddSingleton<DecisionHistory>();
+        // No client timeout: the installer download takes minutes. Asking for the version has its own limit.
+        services.AddSingleton(sp => new GitHubUpdateClient(
+            new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
+            sp.GetRequiredService<IOptions<UpdatesOptions>>()));
+        services.AddSingleton<UpdateService>();
 
         // Registered in display order.
         services.AddSingleton<IServiceProbe, SortingProbe>();
@@ -99,6 +106,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IServiceProbe, ExampleStoreProbe>();
         services.AddSingleton<IServiceProbe, ClipModelProbe>();
         services.AddSingleton<IServiceProbe, WatchFolderProbe>();
+        services.AddSingleton<IServiceProbe, UpdateProbe>();
         services.AddSingleton<StatusMonitor>();
 
         // Focus tracking must be running before intake sorts the first new file.
@@ -109,6 +117,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<CorrectionWatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<StatusMonitor>());
         services.AddHostedService<PrivacyMaintenance>();
+        services.AddHostedService(sp => sp.GetRequiredService<UpdateService>());
         return services;
     }
 }

@@ -29,6 +29,9 @@ WizardStyle=modern
 #ifdef SmokeTest
 CreateUninstallRegKey=no
 DisableDirPage=no
+#ifdef SmokeMutex
+AppMutex=Local\ScreenSorter.SingleInstance
+#endif
 #else
 AppMutex=Local\ScreenSorter.SingleInstance
 #endif
@@ -36,7 +39,39 @@ AppMutex=Local\ScreenSorter.SingleInstance
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "*.pdb,*.lib,DirectML.Debug.dll"; Flags: recursesubdirs ignoreversion
 
-#ifndef SmokeTest
+[Code]
+// The app's own update passes /UPDATE=1, and nobody is there to start the new version.
+function StartAfterUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:update|0}') = '1';
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataFolder: String;
+begin
+  if (CurUninstallStep <> usPostUninstall) or UninstallSilent then
+    exit;
+#ifdef SmokeTest
+  DataFolder := ExpandFileName(ExpandConstant('{app}\..\data-smoke'));
+#else
+  DataFolder := ExpandConstant('{localappdata}\ScreenSorter');
+#endif
+  if not DirExists(DataFolder) then
+    exit;
+  if MsgBox('Also delete your ScreenSorter data?' + #13#10#13#10 +
+      'This removes your settings, sorting history, learned examples, logs and the downloaded image model. ' +
+      'Your screenshots stay where they are.' + #13#10#13#10 +
+      'Keep the data if you may install ScreenSorter again.',
+      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+    DelTree(DataFolder, True, True, True);
+end;
+
+#ifdef SmokeTest
+[Run]
+; Proves when the entry fires without starting a copy that would sort the real screenshots folder.
+Filename: "{cmd}"; Parameters: "/c echo restarted> ""{app}\restarted.txt"""; Flags: runhidden; Check: StartAfterUpdate
+#else
 [Tasks]
 Name: "autostart"; Description: "Start ScreenSorter with Windows"; Flags: unchecked
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
@@ -52,4 +87,5 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\ScreenSorter.App.exe"; Description: "Start ScreenSorter"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ScreenSorter.App.exe"; Flags: nowait; Check: StartAfterUpdate
 #endif

@@ -48,7 +48,9 @@ Right-click the tray icon for Pause/Resume, Sort now (process waiting files with
 
 **History** lists where each screenshot went and why, with a preview. You can undo the app's move, which puts the file back and leaves it alone until you move it yourself, or send it to another folder, which teaches the app just like dragging it. **Accuracy** counts how often you moved what each stage placed, and which folders get mixed up most.
 
-Uninstalling from Windows Settings removes the app and leaves your screenshots and `%LOCALAPPDATA%\ScreenSorter` in place.
+Uninstalling from Windows Settings removes the app and asks whether to delete `%LOCALAPPDATA%\ScreenSorter` too. Your screenshots stay either way. A silent uninstall keeps the data. If you delete it and install again, the app treats files already sorted as placed by you.
+
+New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. The installer is not code-signed. The app checks each download against the SHA-256 published with the release, which catches a damaged file but not a compromised release.
 
 ### Optional helper
 
@@ -102,7 +104,7 @@ The decision log records file paths and the focused app's name, program path and
 
 File paths and the rest of each record stay as long as the log does. They are how the app tells a file it sorted from one you placed yourself, so removing them would teach it from its own guesses. To remove everything, delete `%LOCALAPPDATA%\ScreenSorter`; the app then treats sorted files as placed by you.
 
-The app reads window titles, process paths, and Steam and Epic install data. While classifying, it passes the window title to the local model as a hint. Its only network traffic outside this machine is the one-time model download.
+The app reads window titles, process paths, and Steam and Epic install data. While classifying, it passes the window title to the local model as a hint. Its only network traffic outside this machine is the one-time model download and, unless you turn it off, a daily request to GitHub for the latest version and the download of a new one. Those requests carry no screenshots, file names or window titles.
 
 ## Current limits
 

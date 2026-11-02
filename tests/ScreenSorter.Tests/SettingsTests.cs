@@ -65,7 +65,8 @@ public class SettingsEditModelTests
         new BacklogOptions(),
         new NotificationsOptions(),
         new CorrectionsOptions(),
-        new PrivacyOptions());
+        new PrivacyOptions(),
+        new UpdatesOptions());
 
     [Fact]
     public void Defaults_AreValid() => Assert.Empty(Model().Validate());

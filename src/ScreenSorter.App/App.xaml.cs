@@ -13,6 +13,7 @@ using ScreenSorter.Infrastructure;
 using ScreenSorter.Infrastructure.Files;
 using ScreenSorter.Infrastructure.Logging;
 using ScreenSorter.Infrastructure.Status;
+using ScreenSorter.Infrastructure.Updates;
 using ScreenSorter.Infrastructure.Win32;
 
 namespace ScreenSorter.App;
@@ -35,6 +36,7 @@ public partial class App : Application
     private GuideWindow? _guide;
     private ActivityWindow? _activityWindow;
     private bool _firstRun;
+    private bool _exiting;
 
     /// <summary>Starts the host and the tray icon; exits if another instance keeps running.</summary>
     /// <param name="e">Command-line arguments; <c>--Section:Key=value</c> overrides configuration.</param>
@@ -80,6 +82,8 @@ public partial class App : Application
             _tray.GuideRequested += (_, _) => OpenGuide();
             _tray.StatusRequested += (_, _) => OpenActivity().ShowStatusPage();
             _tray.HistoryRequested += (_, _) => OpenActivity().ShowHistoryPage();
+            _host.Services.GetRequiredService<UpdateService>().ReadyToInstall +=
+                (_, setup) => Dispatcher.BeginInvoke(() => InstallUpdateAsync(setup));
 
             if (_firstRun)
                 OpenGuide();
@@ -201,7 +205,8 @@ public partial class App : Application
             services.GetRequiredService<IOptions<BacklogOptions>>().Value,
             services.GetRequiredService<IOptions<NotificationsOptions>>().Value,
             services.GetRequiredService<IOptions<CorrectionsOptions>>().Value,
-            services.GetRequiredService<IOptions<PrivacyOptions>>().Value);
+            services.GetRequiredService<IOptions<PrivacyOptions>>().Value,
+            services.GetRequiredService<IOptions<UpdatesOptions>>().Value);
 
         var wasEnabled = _runAtLogin.IsEnabled;
         _settings = new SettingsWindow(model, wasEnabled);
@@ -256,8 +261,19 @@ public partial class App : Application
         await ExitAsync(restart: true);
     }
 
-    private async Task ExitAsync(bool restart)
+    // An open window may hold unsaved edits or something being read. The service offers again until it is a good moment.
+    private async Task InstallUpdateAsync(string setup)
     {
+        if (_settings is null && _guide is null && _activityWindow is null && !_exiting)
+            await ExitAsync(restart: false, updateSetup: setup);
+    }
+
+    private async Task ExitAsync(bool restart, string? updateSetup = null)
+    {
+        if (_exiting)
+            return;
+        _exiting = true;
+
         _tray?.Dispose();
         if (_host is not null)
         {
@@ -274,6 +290,9 @@ public partial class App : Application
                 start.ArgumentList.Add(arg);
             Process.Start(start);
         }
+        // Only now: the installer refuses to run while the single-instance mutex is held.
+        if (updateSetup is not null)
+            Process.Start(UpdateInstallCommand.Create(updateSetup, AppContext.BaseDirectory, Environment.ProcessPath!));
         Shutdown();
     }
 }
