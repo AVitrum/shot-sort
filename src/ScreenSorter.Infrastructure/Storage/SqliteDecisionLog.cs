@@ -31,6 +31,13 @@ public sealed class SqliteDecisionLog : IDecisionLog
             decided_at    TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS ix_decisions_hash ON decisions (file_hash);
+        CREATE TABLE IF NOT EXISTS waiting_focus (
+            file_hash    TEXT PRIMARY KEY,
+            process_name TEXT NULL,
+            exe_path     TEXT NULL,
+            window_title TEXT NULL,
+            focus_at     TEXT NOT NULL
+        );
         """;
 
     private const string Columns = "original_path, new_path, file_hash, category, sub_folder, name, confidence, stage, process_name, exe_path, window_title, focus_at, decided_at";
@@ -56,11 +63,14 @@ public sealed class SqliteDecisionLog : IDecisionLog
     {
         await using var connection = await OpenAsync(ct);
         await using var cmd = connection.CreateCommand();
+        // secure_delete, or the title would stay in a free page where the retention pass cannot overwrite it.
         cmd.CommandText = """
+            PRAGMA secure_delete = ON;
             INSERT INTO decisions (original_path, new_path, file_hash, category, sub_folder, name, confidence,
                                    stage, process_name, exe_path, window_title, focus_at, decided_at)
             VALUES ($original, $new, $hash, $category, $sub, $name, $confidence,
                     $stage, $process, $exe, $title, $focusAt, $decidedAt);
+            DELETE FROM waiting_focus WHERE file_hash = $hash;
             """;
         var c = record.Classification;
         var f = record.Focus;
@@ -78,6 +88,38 @@ public sealed class SqliteDecisionLog : IDecisionLog
         cmd.Parameters.AddWithValue("$focusAt", f is null ? DBNull.Value : f.Timestamp.ToString("O"));
         cmd.Parameters.AddWithValue("$decidedAt", record.DecidedAt.ToString("O"));
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task SaveWaitingFocusAsync(string fileHash, FocusSnapshot focus, CancellationToken ct)
+    {
+        await using var connection = await OpenAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT OR REPLACE INTO waiting_focus (file_hash, process_name, exe_path, window_title, focus_at)
+            VALUES ($hash, $process, $exe, $title, $focusAt);
+            """;
+        cmd.Parameters.AddWithValue("$hash", fileHash);
+        cmd.Parameters.AddWithValue("$process", (object?)focus.ProcessName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$exe", Detail(focus.ExePath));
+        cmd.Parameters.AddWithValue("$title", Detail(focus.WindowTitle));
+        cmd.Parameters.AddWithValue("$focusAt", focus.Timestamp.ToUniversalTime().ToString("O"));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<FocusSnapshot?> FindWaitingFocusAsync(string fileHash, CancellationToken ct)
+    {
+        await using var connection = await OpenAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT process_name, exe_path, window_title, focus_at FROM waiting_focus WHERE file_hash = $hash;";
+        cmd.Parameters.AddWithValue("$hash", fileHash);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct))
+            return null;
+        return new FocusSnapshot(ParseTime(r.GetString(3)), Text(0), Text(1), Text(2));
+
+        string Text(int column) => r.IsDBNull(column) ? "" : r.GetString(column);
     }
 
     /// <inheritdoc />
@@ -102,6 +144,7 @@ public sealed class SqliteDecisionLog : IDecisionLog
             PRAGMA secure_delete = ON;
             UPDATE decisions SET window_title = NULL, exe_path = NULL
             WHERE (window_title IS NOT NULL OR exe_path IS NOT NULL) AND COALESCE(focus_at, decided_at) < $before;
+            DELETE FROM waiting_focus WHERE focus_at < $before;
             """;
         // Stored times are UTC in round-trip format, so comparing them as text compares them as times.
         cmd.Parameters.AddWithValue("$before", before.ToUniversalTime().ToString("O"));

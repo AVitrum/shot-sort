@@ -79,7 +79,7 @@ dotnet run --project src/ScreenSorter.App -- --Paths:WatchFolders:0=C:\Temp\shot
 
 ## Existing screenshots
 
-Screenshots taken while the app was not running have no record of the focused window, so only their image content counts. Blank images go to `_Review`, files that closely match your examples are sorted right away, and the rest wait for the vision model behind any new screenshots. The model handles them while the PC is idle and stops as soon as you come back.
+Screenshots taken while the app was not running have no record of the focused window, so only their image content counts. Files still waiting for the vision model when the app closes keep their record. Blank images go to `_Review`, files that closely match your examples are sorted right away, and the rest wait for the vision model behind any new screenshots. The model handles them while the PC is idle and stops as soon as you come back.
 
 ## Settings
 
