@@ -166,6 +166,7 @@ public sealed class VisionWorkerEjectTests : IDisposable
     private readonly CountingVision _vision = new();
     private readonly VisionQueue _queue = new();
     private readonly SortActivity _sort = new();
+    private readonly FakeServerStarter _starter = new();
     private readonly VisionWorker _worker;
 
     public VisionWorkerEjectTests()
@@ -180,7 +181,7 @@ public sealed class VisionWorkerEjectTests : IDisposable
             new ExampleClassifier(new FakeEmbedder(), new FakeExampleStore(), Opt(new ExamplesOptions()), thresholds, NullLogger<ExampleClassifier>.Instance),
             new WicImageInspector(), _vision, new VisionMapper(lmStudio, rules, thresholds, paths, new FixedCatalog()),
             new SqliteDecisionLog(paths, Opt(new PrivacyOptions())), paths, thresholds, Opt(new BacklogOptions()), TimeProvider.System, NullLogger<SortPipeline>.Instance);
-        _worker = new VisionWorker(_queue, pipeline, _vision,
+        _worker = new VisionWorker(_queue, pipeline, _vision, _starter,
             new IdleDetector(_activity, Opt(new IdleOptions { NoInputMinutes = 5, MaxGpuUtilPercent = 20 })),
             _sort, Opt(new IdleOptions { CheckIntervalSeconds = 5 }), lmStudio, NullLogger<VisionWorker>.Instance);
     }
@@ -228,6 +229,50 @@ public sealed class VisionWorkerEjectTests : IDisposable
         await WaitForAsync(() => _vision.Releases > 0);
 
         Assert.Equal(1, _queue.Count);
+    }
+
+    [Fact]
+    public async Task ModelUnavailable_StartsTheServer_ThenSortsWithoutWaiting()
+    {
+        _starter.CanStart = true;
+        _starter.OnStart = () => _vision.Fail = false;
+        _vision.Fail = true;
+        _queue.Enqueue(new VisionWorkItem(_temp.File("a.png"), null));
+
+        await _worker.StartAsync(CancellationToken.None);
+        await WaitForAsync(() => _vision.Classified > 0);
+
+        Assert.Equal(1, _starter.Calls);
+    }
+
+    [Fact]
+    public async Task ServerStartsButStillFails_TriesOnceThenWaits()
+    {
+        _starter.CanStart = true;
+        _vision.Fail = true;
+        _queue.Enqueue(new VisionWorkItem(_temp.File("a.png"), null));
+
+        await _worker.StartAsync(CancellationToken.None);
+        await WaitForAsync(() => _vision.Releases > 0);
+        await Task.Delay(300);
+
+        Assert.Equal(1, _starter.Calls);
+        Assert.Equal(1, _queue.Count);
+    }
+
+    [Fact]
+    public async Task UserIsActive_DoesNotStartTheServer()
+    {
+        _starter.CanStart = true;
+        _vision.Fail = true;
+        _activity.SinceInput = TimeSpan.Zero;
+        _queue.Enqueue(new VisionWorkItem(_temp.File("a.png"), null));
+
+        await _worker.StartAsync(CancellationToken.None);
+        await WaitForAsync(() => _activity.Checked);
+        await Task.Delay(300);
+
+        Assert.Equal(0, _starter.Calls);
     }
 
     [Fact]

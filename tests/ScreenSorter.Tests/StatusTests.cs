@@ -17,8 +17,35 @@ public class LmStudioProbeTests
     private const string Model = "vendor/model";
     private readonly VisionQueue _queue = new();
 
-    private LmStudioProbe Probe(HttpMessageHandler handler) => new(new HttpClient(handler), _queue,
+    private readonly FakeServerStarter _starter = new();
+
+    private LmStudioProbe Probe(HttpMessageHandler handler) => new(new HttpClient(handler), _queue, _starter,
         Opt(new LmStudioOptions { ManagementUrl = "http://lm.test/api/v1", Model = Model }), Opt(new StatusOptions()));
+
+    [Fact]
+    public async Task Unreachable_ButStartable_IsNotAProblem()
+    {
+        _starter.CanStart = true;
+        _queue.Enqueue(new VisionWorkItem("a.png", null));
+
+        var check = await Probe(new Refuse()).CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ServiceState.Waiting, check.State);
+        Assert.False(check.NeedsAttention);
+    }
+
+    [Fact]
+    public async Task Unreachable_AfterAFailedStart_IsAProblem()
+    {
+        _starter.CanStart = true;
+        _starter.LastStartFailed = true;
+        _queue.Enqueue(new VisionWorkItem("a.png", null));
+
+        var check = await Probe(new Refuse()).CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ServiceState.Problem, check.State);
+        Assert.True(check.NeedsAttention);
+    }
 
     [Fact]
     public async Task ModelPresent_IsOk()
@@ -70,7 +97,7 @@ public class LmStudioProbeTests
     [Fact]
     public async Task NoAnswerInTime_IsAProblem()
     {
-        var probe = new LmStudioProbe(new HttpClient(new Hang()), _queue,
+        var probe = new LmStudioProbe(new HttpClient(new Hang()), _queue, _starter,
             Opt(new LmStudioOptions { ManagementUrl = "http://lm.test/api/v1", Model = Model }), Opt(new StatusOptions { ProbeTimeoutSeconds = 0 }));
 
         var check = await probe.CheckAsync(CancellationToken.None);

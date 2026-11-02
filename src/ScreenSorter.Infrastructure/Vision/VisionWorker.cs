@@ -12,8 +12,9 @@ namespace ScreenSorter.Infrastructure.Vision;
 /// <summary>
 /// Drains <see cref="VisionQueue"/> through <see cref="SortPipeline.ProcessQueuedAsync"/> only while the
 /// system is idle. "Sort now" ignores the idle rules until the queue is empty. When LM Studio is
-/// unavailable the item is put back and the worker waits <see cref="LmStudioOptions.RetryMinutes"/>. The model is
-/// released whenever work stops: queue drained, idle ended, paused, request failed, or shutdown.
+/// unavailable the item is put back, its server is started if possible, and otherwise the worker waits
+/// <see cref="LmStudioOptions.RetryMinutes"/>. The model is released whenever work stops: queue drained, idle ended,
+/// paused, request failed, or shutdown.
 /// </summary>
 /// <remarks>
 /// The GPU condition is only checked before the first item of a batch: the model's own inference
@@ -23,6 +24,7 @@ public sealed class VisionWorker(
     VisionQueue queue,
     SortPipeline pipeline,
     IVisionClassifier vision,
+    IVisionServerStarter serverStarter,
     IdleDetector idle,
     SortActivity activity,
     IOptions<IdleOptions> idleOptions,
@@ -56,6 +58,8 @@ public sealed class VisionWorker(
     {
         var inBatch = false;
         var lastReason = "";
+        // Once per failure: a server that started but still fails must not turn into a tight loop.
+        var startTried = false;
         int sorted = 0, review = 0;
 
         while (true)
@@ -95,13 +99,22 @@ public sealed class VisionWorker(
             {
                 queue.Requeue(item);
                 inBatch = false;
+                if (!startTried)
+                {
+                    startTried = true;
+                    if (await serverStarter.TryStartAsync(ct))
+                        continue;
+                }
+
                 _force = false;
                 logger.LogWarning(ex, "Vision model unavailable; retrying in {Minutes} min", lmStudio.Value.RetryMinutes);
                 await vision.ReleaseModelAsync(ct);
                 await SleepAsync(TimeSpan.FromMinutes(Math.Max(1, lmStudio.Value.RetryMinutes)), ct);
+                startTried = false;
                 continue;
             }
 
+            startTried = false;
             queue.MarkCompleted(item);
             inBatch = true;
             if (outcome.Kind == SortOutcomeKind.Sorted) sorted++;

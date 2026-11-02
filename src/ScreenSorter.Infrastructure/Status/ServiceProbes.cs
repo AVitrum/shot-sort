@@ -37,7 +37,7 @@ public sealed class SortingProbe(VisionQueue queue, SortActivity activity, IdleD
 }
 
 /// <summary>Checks that LM Studio's server answers and that it has the configured model.</summary>
-public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IOptions<LmStudioOptions> options, IOptions<StatusOptions> status) : IServiceProbe
+public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IVisionServerStarter starter, IOptions<LmStudioOptions> options, IOptions<StatusOptions> status) : IServiceProbe
 {
     private const string Name = "LM Studio";
 
@@ -66,6 +66,12 @@ public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IOptions<L
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
                                    || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
+            if (starter.CanStart && !starter.LastStartFailed)
+            {
+                return new ServiceCheck(Name, ServiceState.Waiting,
+                    "Not running. ScreenSorter starts its server when a screenshot needs the vision model and the PC is idle.");
+            }
+
             var detail = waiting == 0
                 ? "Not running. Screenshots that need the vision model will wait for it."
                 : $"Not running. {(waiting == 1 ? "1 screenshot waits" : $"{waiting} screenshots wait")} for it.";

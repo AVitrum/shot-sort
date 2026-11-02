@@ -53,6 +53,15 @@ public sealed class LmStudioOptions
     /// <summary>Wait before retrying after LM Studio was unreachable or returned an error.</summary>
     public int RetryMinutes { get; set; } = 5;
 
+    /// <summary>Start LM Studio's server when files need it and the PC is idle, if it is on this machine and <see cref="CliPath"/> exists.</summary>
+    public bool AutoStartServer { get; set; } = true;
+
+    /// <summary>LM Studio's command line tool. Environment variables are expanded.</summary>
+    public string CliPath { get; set; } = @"%USERPROFILE%\.lmstudio\bin\lms.exe";
+
+    /// <summary>Longest wait for the tool to finish starting the server.</summary>
+    public int StartTimeoutSeconds { get; set; } = 60;
+
     /// <summary>
     /// Categories the model may answer (keys, used as the JSON schema enum) mapped to their folder
     /// under the sorted root. Unknown answers go to review.

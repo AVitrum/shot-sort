@@ -74,6 +74,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IGameCatalog>(),
             sp.GetRequiredService<IOptions<LmStudioOptions>>(),
             sp.GetRequiredService<ILogger<LmStudioVisionClient>>()));
+        services.AddSingleton<IVisionServerStarter, LmsServerStarter>();
         // No client timeout: the model download takes minutes. It has its own cancellation.
         services.AddSingleton(sp => new ClipModelFile(
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
@@ -92,6 +93,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IServiceProbe>(sp => new LmStudioProbe(
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
             sp.GetRequiredService<VisionQueue>(),
+            sp.GetRequiredService<IVisionServerStarter>(),
             sp.GetRequiredService<IOptions<LmStudioOptions>>(),
             sp.GetRequiredService<IOptions<StatusOptions>>()));
         services.AddSingleton<IServiceProbe, ExampleStoreProbe>();

@@ -93,6 +93,22 @@ internal sealed class FakeEmbedder : ScreenSorter.Core.Examples.IImageEmbedder
     }
 }
 
+internal sealed class FakeServerStarter : ScreenSorter.Core.Vision.IVisionServerStarter
+{
+    public bool CanStart { get; set; }
+    public bool LastStartFailed { get; set; }
+    public bool Result { get; set; } = true;
+    public int Calls { get; private set; }
+    public Action? OnStart { get; set; }
+
+    public Task<bool> TryStartAsync(CancellationToken ct)
+    {
+        Calls++;
+        OnStart?.Invoke();
+        return Task.FromResult(CanStart && Result);
+    }
+}
+
 internal sealed class FakeExampleStore : ScreenSorter.Core.Examples.IExampleStore
 {
     public bool Down { get; set; }

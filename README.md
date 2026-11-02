@@ -44,7 +44,7 @@ This app moves and renames files in your screenshots folder, **including screens
 
 Right-click the tray icon for Pause/Resume, Sort now (process waiting files without waiting for idle), the review and screenshots folders, History, Status, How it works, Settings and Exit. Double-click it for Settings.
 
-**Status** shows whether LM Studio is running, how to start it, how many examples were learned, and how many screenshots wait and why. If something stops while it is needed, a notification tells you once.
+**Status** shows whether LM Studio is running, how many examples were learned, and how many screenshots wait and why. If something stops while it is needed, a notification tells you once.
 
 **History** lists where each screenshot went and why, with a preview. You can undo the app's move, which puts the file back and leaves it alone until you move it yourself, or send it to another folder, which teaches the app just like dragging it. **Accuracy** counts how often you moved what each stage placed, and which folders get mixed up most.
 
@@ -55,11 +55,11 @@ Uninstalling from Windows Settings removes the app and leaves your screenshots a
 | Needed for | What |
 |---|---|
 | Rules and learning from corrections | Nothing more; they work out of the box |
-| Vision model | [LM Studio](https://lmstudio.ai/) with its server on, a vision model downloaded, and about 7 GB of free VRAM |
+| Vision model | [LM Studio](https://lmstudio.ai/) with a vision model downloaded, and about 7 GB of free VRAM |
 
 Without LM Studio, files no rule or example can place stay in the screenshots folder until it is available.
 
-In LM Studio, download the model named under **Vision model** in Settings and start the server.
+In LM Studio, download the model named under **Vision model** in Settings. When a screenshot needs the model and the PC is idle, ScreenSorter starts LM Studio's server with `lms server start` and leaves it running. To start it yourself instead, set `LmStudio:AutoStartServer` to `false` in `%LOCALAPPDATA%\ScreenSorter\settings.json`.
 
 On first run the app downloads the CLIP image model (352 MB) from Hugging Face and checks it against a pinned SHA-256.
 
@@ -106,7 +106,7 @@ The app reads window titles, process paths, and Steam and Epic install data. Whi
 
 ## Current limits
 
-- The app does not start LM Studio's server. After a reboot, files that need it wait until it is running; **Status** shows this.
+- LM Studio itself is a separate install, and uninstalling ScreenSorter does not remove it.
 - The vision model can pick the wrong game from your known games. Moving the file to the right folder teaches the app.
 - Images only, no videos.
 
