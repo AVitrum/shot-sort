@@ -37,12 +37,15 @@ public sealed class SqliteDecisionLog : IDecisionLog
     private const int ColumnCount = 13;
 
     private readonly string _connectionString;
+    private readonly bool _keepFocusDetails;
     private readonly Lazy<Task> _init;
 
     /// <summary>Creates the log; the database file and folder are created on first use.</summary>
     /// <param name="options">Provides <see cref="PathsOptions.DatabasePath"/>.</param>
-    public SqliteDecisionLog(IOptions<PathsOptions> options)
+    /// <param name="privacy">Whether window titles and program paths are stored at all.</param>
+    public SqliteDecisionLog(IOptions<PathsOptions> options, IOptions<PrivacyOptions> privacy)
     {
+        _keepFocusDetails = privacy.Value.WindowTitleDays > 0;
         var path = PathsOptions.Expand(options.Value.DatabasePath);
         _connectionString = new SqliteConnectionStringBuilder { DataSource = path, Pooling = true }.ToString();
         _init = new Lazy<Task>(() => InitializeAsync(path));
@@ -70,8 +73,8 @@ public sealed class SqliteDecisionLog : IDecisionLog
         cmd.Parameters.AddWithValue("$confidence", c.Confidence);
         cmd.Parameters.AddWithValue("$stage", c.Stage.ToString());
         cmd.Parameters.AddWithValue("$process", (object?)f?.ProcessName ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$exe", (object?)f?.ExePath ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$title", (object?)f?.WindowTitle ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$exe", Detail(f?.ExePath));
+        cmd.Parameters.AddWithValue("$title", Detail(f?.WindowTitle));
         cmd.Parameters.AddWithValue("$focusAt", f is null ? DBNull.Value : f.Timestamp.ToString("O"));
         cmd.Parameters.AddWithValue("$decidedAt", record.DecidedAt.ToString("O"));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -86,6 +89,30 @@ public sealed class SqliteDecisionLog : IDecisionLog
         cmd.Parameters.AddWithValue("$hash", fileHash);
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? ReadRecord(r, 0) : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> EraseFocusDetailsAsync(DateTimeOffset before, CancellationToken ct)
+    {
+        await using var connection = await OpenAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        // secure_delete overwrites the old text instead of only marking it free. The checkpoint then empties the
+        // write-ahead log, which would otherwise still hold it.
+        cmd.CommandText = """
+            PRAGMA secure_delete = ON;
+            UPDATE decisions SET window_title = NULL, exe_path = NULL
+            WHERE (window_title IS NOT NULL OR exe_path IS NOT NULL) AND COALESCE(focus_at, decided_at) < $before;
+            """;
+        // Stored times are UTC in round-trip format, so comparing them as text compares them as times.
+        cmd.Parameters.AddWithValue("$before", before.ToUniversalTime().ToString("O"));
+        var changed = await cmd.ExecuteNonQueryAsync(ct);
+        if (changed > 0)
+        {
+            await using var checkpoint = connection.CreateCommand();
+            checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+            await checkpoint.ExecuteNonQueryAsync(ct);
+        }
+        return changed;
     }
 
     /// <inheritdoc />
@@ -133,6 +160,9 @@ public sealed class SqliteDecisionLog : IDecisionLog
             paths.Add(r.GetString(0));
         return paths;
     }
+
+    private object Detail(string? value) =>
+        _keepFocusDetails && !string.IsNullOrEmpty(value) ? value : DBNull.Value;
 
     private static string Prefixed(string table) =>
         string.Join(", ", Columns.Split(", ").Select(c => $"{table}.{c}"));

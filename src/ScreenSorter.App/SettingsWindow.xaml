@@ -239,6 +239,45 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
+
+            <TabItem Header="Privacy" Tag="&#xE72E;">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,16,24,8">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Privacy" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,16"
+                                   Text="Everything stays on this PC. These settings limit how long personal details are kept here." />
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Window titles and program paths" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                           Text="A window title can show a chat name, a document or a web page. The app records it with each decision so that you can see why a screenshot went where it did. Older ones are erased. The record that a file was sorted stays, or the app would mistake old files for ones you placed yourself." />
+                                <DockPanel Margin="0,0,0,12">
+                                    <TextBox DockPanel.Dock="Right" Width="80" Text="{Binding WindowTitleDays, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="Days to keep them. 0 means they are not stored" />
+                                    <TextBlock Text="Days to keep them. 0 means they are not stored" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                </DockPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Erase them now" Click="OnEraseWindowTitles" MinWidth="88" />
+                                    <TextBlock x:Name="EraseMessage" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Log files" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10" Text="They list file names and the focused program, and help when something goes wrong." />
+                                <DockPanel>
+                                    <TextBox DockPanel.Dock="Right" Width="80" Text="{Binding LogDays, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="Days to keep log files" />
+                                    <TextBlock Text="Days to keep log files" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

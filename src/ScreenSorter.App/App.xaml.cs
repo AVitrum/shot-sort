@@ -200,7 +200,8 @@ public partial class App : Application
             services.GetRequiredService<IOptions<LmStudioOptions>>().Value,
             services.GetRequiredService<IOptions<BacklogOptions>>().Value,
             services.GetRequiredService<IOptions<NotificationsOptions>>().Value,
-            services.GetRequiredService<IOptions<CorrectionsOptions>>().Value);
+            services.GetRequiredService<IOptions<CorrectionsOptions>>().Value,
+            services.GetRequiredService<IOptions<PrivacyOptions>>().Value);
 
         var wasEnabled = _runAtLogin.IsEnabled;
         _settings = new SettingsWindow(model, wasEnabled);
@@ -210,8 +211,23 @@ public partial class App : Application
             FinishFirstRunIfDone();
         };
         _settings.GuideRequested += (_, _) => OpenGuide();
+        _settings.EraseWindowTitlesRequested += async (_, _) => await EraseWindowTitlesAsync();
         _settings.SaveRequested += async (_, _) => await SaveSettingsAsync(model, wasEnabled);
         _settings.Show();
+    }
+
+    private async Task EraseWindowTitlesAsync()
+    {
+        try
+        {
+            var erased = await _host!.Services.GetRequiredService<IDecisionLog>().EraseFocusDetailsAsync(DateTimeOffset.MaxValue, CancellationToken.None);
+            _settings?.ShowEraseResult(erased == 1 ? "Erased from 1 record." : $"Erased from {erased} records.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            _host!.Services.GetRequiredService<ILogger<App>>().LogWarning(ex, "Could not erase window titles");
+            _settings?.ShowEraseResult("That did not work. See the log.");
+        }
     }
 
     private async Task SaveSettingsAsync(SettingsEditModel model, bool wasEnabled)

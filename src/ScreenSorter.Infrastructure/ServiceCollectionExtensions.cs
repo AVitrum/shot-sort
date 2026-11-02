@@ -29,8 +29,8 @@ namespace ScreenSorter.Infrastructure;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers options, the pipeline and its stages, and six hosted services started in this order:
-    /// focus tracker, CLIP model download, intake worker, vision worker, correction watcher, status monitor.
+    /// Registers options, the pipeline and its stages, and seven hosted services started in this order:
+    /// focus tracker, CLIP model download, intake worker, vision worker, correction watcher, status monitor, privacy maintenance.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">Root configuration containing the sections named in the options classes.</param>
@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.Configure<BacklogOptions>(configuration.GetSection(BacklogOptions.Section));
         services.Configure<NotificationsOptions>(configuration.GetSection(NotificationsOptions.Section));
         services.Configure<StatusOptions>(configuration.GetSection(StatusOptions.Section));
+        services.Configure<PrivacyOptions>(configuration.GetSection(PrivacyOptions.Section));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SortActivity>();
@@ -108,6 +109,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<VisionWorker>();
         services.AddHostedService<CorrectionWatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<StatusMonitor>());
+        services.AddHostedService<PrivacyMaintenance>();
         return services;
     }
 }

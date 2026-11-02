@@ -30,6 +30,15 @@ public interface IDecisionLog
     /// <summary>Returns every decision in the order made, without personal details, for measuring accuracy.</summary>
     /// <param name="ct">Cancels the query.</param>
     Task<IReadOnlyList<DecisionFact>> ListFactsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Erases window titles and program paths recorded before a point in time, overwriting them on disk. Whole records
+    /// stay: without them, sorted files would look placed by the user and the app would learn from its own guesses.
+    /// </summary>
+    /// <param name="before">Details of focus snapshots older than this are erased.</param>
+    /// <param name="ct">Cancels the update.</param>
+    /// <returns>How many records changed.</returns>
+    Task<int> EraseFocusDetailsAsync(DateTimeOffset before, CancellationToken ct);
 }
 
 /// <summary>What the log knows about one file.</summary>

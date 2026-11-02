@@ -18,7 +18,7 @@ public sealed class DecisionHistoryTests : IDisposable
     public DecisionHistoryTests()
     {
         var paths = Opt(new PathsOptions { SortedRoot = _temp.Path, ReviewFolder = "_Review", DatabasePath = Path.Combine(_temp.Path, "db", "h.db") });
-        _log = new SqliteDecisionLog(paths);
+        _log = new SqliteDecisionLog(paths, Opt(new PrivacyOptions()));
         _store = new FileSystemScreenshotStore(Opt(new IntakeOptions { StabilityPollMilliseconds = 50 }), TimeProvider.System);
         _history = new DecisionHistory(_store, _log, paths, TimeProvider.System, NullLogger<DecisionHistory>.Instance);
     }

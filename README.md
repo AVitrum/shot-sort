@@ -90,7 +90,7 @@ Screenshots taken while the app was not running have no record of the focused wi
 
 ## Settings
 
-Open **Settings** from the tray menu to change the watch folders, app rules, game aliases, vision categories, thresholds, idle conditions and the LM Studio address, and to turn on **Start with Windows**. Saving restarts the app. Your values go to `%LOCALAPPDATA%\ScreenSorter\settings.json`, layered over the defaults in `src/ScreenSorter.App/appsettings.json`, so a rule you delete stays deleted.
+Open **Settings** from the tray menu to change the watch folders, app rules, game aliases, vision categories, thresholds, idle conditions, retention and the LM Studio address, and to turn on **Start with Windows**. Saving restarts the app. Your values go to `%LOCALAPPDATA%\ScreenSorter\settings.json`, layered over the defaults in `src/ScreenSorter.App/appsettings.json`, so a rule you delete stays deleted.
 
 The windows follow your Windows light or dark mode and accent color.
 
@@ -100,9 +100,16 @@ Any setting can also be overridden for one run on the command line with `--Secti
 
 ## Your data
 
-Data stays in `%LOCALAPPDATA%\ScreenSorter`: your settings, a marker that the guide was shown, the decision log (SQLite), logs and the CLIP model. The decision log records file paths and the focused app's name and window title. Qdrant's data stays in a local Docker volume, reachable only from this machine.
+Data stays in `%LOCALAPPDATA%\ScreenSorter`: your settings, a marker that the guide was shown, the decision log (SQLite), logs and the CLIP model. Qdrant's data stays in a local Docker volume, reachable only from this machine. It holds image embeddings and folder names, not the images.
 
-The app reads window titles, process paths, and Steam and Epic install data. Its only network traffic outside this machine is the one-time model download.
+The decision log records file paths and the focused app's name, program path and window title. A window title can reveal a chat name, a document or a web page, so under **Settings > Privacy**:
+
+- Window titles and program paths are erased after 30 days. Set 0 to not store them at all, or use **Erase them now**. They are overwritten on disk, not only marked as deleted.
+- Log files are deleted after 14 days.
+
+File paths and the rest of each record stay as long as the log does. They are how the app tells a file it sorted from one you placed yourself, so removing them would teach it from its own guesses. To remove everything, delete `%LOCALAPPDATA%\ScreenSorter`; the app then treats sorted files as placed by you.
+
+The app reads window titles, process paths, and Steam and Epic install data. While classifying, it passes the window title to the local model as a hint. Its only network traffic outside this machine is the one-time model download.
 
 ## Current limits
 
