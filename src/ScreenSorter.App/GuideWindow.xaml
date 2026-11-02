@@ -81,7 +81,7 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource Heading}" Text="Two optional helpers" Margin="0,0,0,2" />
                         <TextBlock Style="{StaticResource Hint}"
-                                   Text="App rules work on their own. Learning from examples needs Qdrant running in Docker, and the vision model needs LM Studio with its server on. ScreenSorter does not start them for you." />
+                                   Text="App rules work on their own. Learning from examples needs Qdrant running in Docker, and the vision model needs LM Studio with its server on. ScreenSorter does not start them for you, but Status in the tray menu shows whether they run and how to start them." />
                     </StackPanel>
                 </Border>
             </StackPanel>

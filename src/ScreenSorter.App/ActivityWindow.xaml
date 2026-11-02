@@ -1,0 +1,63 @@
+<Window x:Class="ScreenSorter.App.ActivityWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:status="clr-namespace:ScreenSorter.Core.Status;assembly=ScreenSorter.Core"
+        Title="ScreenSorter activity"
+        Icon="/Assets/app.ico"
+        Width="960" Height="680" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True">
+    <TabControl x:Name="Tabs" Style="{StaticResource SideNavigation}" ItemContainerStyle="{StaticResource SideNavigationItem}">
+        <TabItem x:Name="StatusTab" Header="Status" Tag="&#xE9D9;">
+            <DockPanel Margin="16,16,24,16">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+                    <Button DockPanel.Dock="Right" Content="Check now" Click="OnCheckNow" MinWidth="88" VerticalAlignment="Top" />
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="Status" />
+                        <TextBlock x:Name="VersionText" Style="{StaticResource Hint}" />
+                    </StackPanel>
+                </DockPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="StatusList" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type status:ServiceCheck}">
+                                <Border Style="{StaticResource Card}">
+                                    <DockPanel>
+                                        <TextBlock x:Name="StateIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" VerticalAlignment="Top" FontSize="20" Margin="0,0,14,0"
+                                                   Text="&#xE73E;" Foreground="{DynamicResource SystemFillColorSuccessBrush}" />
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource Heading}" Text="{Binding Name}" />
+                                            <TextBlock Style="{StaticResource Hint}" Text="{Binding Detail}" />
+                                            <TextBlock x:Name="FixText" TextWrapping="Wrap" Margin="0,6,0,0" Text="{Binding Fix}" />
+                                            <DockPanel x:Name="CommandRow" Margin="0,8,0,0">
+                                                <Button DockPanel.Dock="Right" Content="Copy" Tag="{Binding FixCommand}" Click="OnCopyCommand" Margin="8,0,0,0" MinWidth="72" />
+                                                <TextBox IsReadOnly="True" Text="{Binding FixCommand, Mode=OneWay}" FontFamily="Cascadia Mono, Consolas"
+                                                         AutomationProperties.Name="Command to run" />
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding State}" Value="{x:Static status:ServiceState.Waiting}">
+                                        <Setter TargetName="StateIcon" Property="Text" Value="&#xE823;" />
+                                        <Setter TargetName="StateIcon" Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="{x:Static status:ServiceState.Problem}">
+                                        <Setter TargetName="StateIcon" Property="Text" Value="&#xE783;" />
+                                        <Setter TargetName="StateIcon" Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Fix}" Value="{x:Null}">
+                                        <Setter TargetName="FixText" Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding FixCommand}" Value="{x:Null}">
+                                        <Setter TargetName="CommandRow" Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </TabItem>
+    </TabControl>
+</Window>

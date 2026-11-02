@@ -12,6 +12,7 @@ using ScreenSorter.Core.Sorting;
 using ScreenSorter.Infrastructure;
 using ScreenSorter.Infrastructure.Files;
 using ScreenSorter.Infrastructure.Logging;
+using ScreenSorter.Infrastructure.Status;
 using ScreenSorter.Infrastructure.Win32;
 
 namespace ScreenSorter.App;
@@ -32,6 +33,7 @@ public partial class App : Application
     private TrayIcon? _tray;
     private SettingsWindow? _settings;
     private GuideWindow? _guide;
+    private ActivityWindow? _activityWindow;
     private bool _firstRun;
 
     /// <summary>Starts the host and the tray icon; exits if another instance keeps running.</summary>
@@ -76,11 +78,14 @@ public partial class App : Application
             _tray.ExitRequested += async (_, _) => await ExitAsync(restart: false);
             _tray.SettingsRequested += (_, _) => OpenSettings();
             _tray.GuideRequested += (_, _) => OpenGuide();
+            _tray.StatusRequested += (_, _) => OpenActivity().ShowStatusPage();
 
             if (_firstRun)
                 OpenGuide();
             if (builder.Configuration.GetValue<bool>("Ui:OpenSettingsOnStart"))
                 OpenSettings();
+            if (builder.Configuration.GetValue<bool>("Ui:OpenActivityOnStart"))
+                OpenActivity();
         }
         catch (Exception ex)
         {
@@ -154,6 +159,20 @@ public partial class App : Application
         };
         _guide.SettingsRequested += (_, _) => OpenSettings();
         _guide.Show();
+    }
+
+    private ActivityWindow OpenActivity()
+    {
+        if (_activityWindow is not null)
+        {
+            _activityWindow.Activate();
+            return _activityWindow;
+        }
+
+        _activityWindow = new ActivityWindow(_host!.Services.GetRequiredService<StatusMonitor>());
+        _activityWindow.Closed += (_, _) => _activityWindow = null;
+        _activityWindow.Show();
+        return _activityWindow;
     }
 
     private void OpenSettings()
