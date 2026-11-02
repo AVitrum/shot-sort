@@ -1,5 +1,7 @@
 # Qdrant vector store for confirmed screenshot examples (milestone 4).
 # Start: docker compose up -d   Check: curl http://localhost:6333/readyz
+# The fixed name keeps the same container and volume whichever folder this file is started from.
+name: shot-sort
 services:
   qdrant:
     image: qdrant/qdrant:v1.20.0

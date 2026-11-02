@@ -33,9 +33,13 @@ public sealed class CorrectionWatcher(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!Directory.Exists(_root))
+        try
         {
-            logger.LogWarning("Sorted root {Root} does not exist; corrections are not watched", _root);
+            Directory.CreateDirectory(_root);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            logger.LogWarning(ex, "Sorted root {Root} cannot be used; corrections are not watched", _root);
             return;
         }
 

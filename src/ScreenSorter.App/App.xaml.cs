@@ -49,6 +49,7 @@ public partial class App : Application
 
         try
         {
+            ScreenshotsFolder.PublishEnvironmentVariable();
             // Content root = exe folder: at login the working directory is not the app folder.
             var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
             {

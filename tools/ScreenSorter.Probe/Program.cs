@@ -28,6 +28,7 @@ if (args.Length == 0 || !Directory.Exists(args[0]))
     return 2;
 }
 
+ScreenSorter.Infrastructure.Win32.ScreenshotsFolder.PublishEnvironmentVariable();
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
     Args = args[1..],
