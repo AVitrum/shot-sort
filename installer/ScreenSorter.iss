@@ -10,7 +10,7 @@
 AppId={{6C2F4C57-1B7E-4E0B-9D35-3B4B7E8A2F11}
 AppName=ScreenSorter
 AppVersion={#AppVersion}
-AppPublisher=Andrew Almashi
+AppPublisher=AVitrum
 AppPublisherURL=https://github.com/AVitrum/shot-sort
 DefaultDirName={localappdata}\Programs\ScreenSorter
 DefaultGroupName=ScreenSorter
