@@ -91,7 +91,9 @@ public sealed class TrayIcon : IDisposable
     private void OnStateChanged(object? sender, EventArgs e) => _dispatcher.BeginInvoke(() =>
     {
         _pauseItem.Text = _activity.IsPaused ? "Resume" : "Pause";
-        _icon.Text = _activity.IsPaused ? "ScreenSorter (paused)" : "ScreenSorter";
+        _icon.Text = _activity.IsPaused ? "ScreenSorter (paused)"
+            : _activity.IsHeld ? "ScreenSorter (waiting for the guide)"
+            : "ScreenSorter";
     });
 
     private void OnBatchCompleted(object? sender, BatchSummary summary) => _dispatcher.BeginInvoke(() =>

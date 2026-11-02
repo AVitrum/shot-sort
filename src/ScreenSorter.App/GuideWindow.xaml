@@ -33,6 +33,9 @@
 ├─ Code/
 └─ _Review/   screenshots it could not place</TextBlock>
                 </Border>
+                <local:IconRow x:Name="WaitingRow" Margin="0,8,0,4"
+                                        Glyph="&#xE769;" Title="Nothing moves until you close this guide"
+                                        Text="Sorting starts when you finish here. To change something first, use Open settings on the last step." />
                 <local:IconRow x:Name="WatchingRow" Margin="0,8,0,12"
                                         Glyph="&#xE8B7;" Title="Watching" />
                 <local:IconRow x:Name="BacklogRow"

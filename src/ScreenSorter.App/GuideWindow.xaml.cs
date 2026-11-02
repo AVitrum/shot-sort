@@ -12,11 +12,13 @@ public partial class GuideWindow : Window
     /// <param name="watchFolders">The watched folders, with environment variables expanded.</param>
     /// <param name="reviewFolder">Name of the folder for screenshots the app could not place.</param>
     /// <param name="backlogEnabled">Whether screenshots already in the watched folders get sorted.</param>
-    public GuideWindow(IEnumerable<string> watchFolders, string reviewFolder, bool backlogEnabled)
+    /// <param name="sortingHeld">Whether sorting is waiting for this window to close.</param>
+    public GuideWindow(IEnumerable<string> watchFolders, string reviewFolder, bool backlogEnabled, bool sortingHeld)
     {
         InitializeComponent();
         _pages = [WelcomePage, DecidePage, TeachPage, TrayPage];
 
+        WaitingRow.Visibility = sortingHeld ? Visibility.Visible : Visibility.Collapsed;
         WatchingRow.Text = string.Join(Environment.NewLine, watchFolders);
         BacklogRow.Visibility = backlogEnabled ? Visibility.Visible : Visibility.Collapsed;
         ReviewRow.Text = $"It goes to {reviewFolder} for you to place. Blank or black images go there too.";
