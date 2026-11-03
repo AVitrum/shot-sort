@@ -66,6 +66,18 @@ if (string.Equals(builder.Configuration["Probe:Mode"], "evaluate", StringCompari
     return await EvaluateAsync();
 if (string.Equals(builder.Configuration["Probe:Mode"], "burst", StringComparison.OrdinalIgnoreCase))
     return await EvaluateBurstsAsync();
+if (string.Equals(builder.Configuration["Probe:Mode"], "gpu", StringComparison.OrdinalIgnoreCase))
+{
+    var activity = host.Services.GetRequiredService<ScreenSorter.Core.Idle.ISystemActivity>();
+    var counters = new ScreenSorter.Infrastructure.Win32.PdhGpuLoad(host.Services.GetRequiredService<ILogger<ScreenSorter.Infrastructure.Win32.PdhGpuLoad>>());
+    for (var i = 0; i < 5; i++)
+    {
+        var watch = Stopwatch.StartNew();
+        var fromCounters = counters.Read();
+        Console.WriteLine($"NVML or fallback: {activity.GpuUtilizationPercent()}%  Windows counters: {fromCounters}% ({watch.ElapsedMilliseconds} ms)");
+    }
+    return 0;
+}
 return await ClassifyAsync();
 
 // Every screenshot under the root that the user confirmed, with its label and embedding.
