@@ -61,7 +61,7 @@ New versions install by themselves when the PC is idle, nothing waits to be sort
 
 Without LM Studio, files no rule or example can place stay in the screenshots folder until it is available. To do without it, untick **Use a vision model** under **Settings > Vision model**: those files then go straight to `_Review`, and moving them from there teaches the app. A file already waiting goes to `_Review` the next time the app starts.
 
-In LM Studio, download the model named under **Vision model** in Settings. When a screenshot needs the model and the PC is idle, ScreenSorter starts LM Studio's server with `lms server start` and leaves it running. To start it yourself instead, set `LmStudio:AutoStartServer` to `false` in `%LOCALAPPDATA%\ScreenSorter\settings.json`.
+In LM Studio, download the model named under **Vision model** in Settings. When a screenshot needs the model and the PC is idle, ScreenSorter starts LM Studio's server with `lms server start` and leaves it running. If that fails, **Status** says so and the files keep waiting: open LM Studio and start its server. To always start it yourself, set `LmStudio:AutoStartServer` to `false` in `%LOCALAPPDATA%\ScreenSorter\settings.json`.
 
 On first run the app downloads the CLIP image model (352 MB) from Hugging Face and checks it against a pinned SHA-256.
 
