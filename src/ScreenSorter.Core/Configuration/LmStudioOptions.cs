@@ -6,6 +6,12 @@ public sealed class LmStudioOptions
     /// <summary>Configuration section name.</summary>
     public const string Section = "LmStudio";
 
+    /// <summary>
+    /// Whether a vision model is used at all. When off, nothing needs LM Studio or the GPU's memory: files the rules and
+    /// examples cannot place go straight to the review folder instead of waiting for the model.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>OpenAI-compatible base URL, e.g. <c>http://localhost:1234/v1</c>.</summary>
     public string BaseUrl { get; set; } = "http://localhost:1234/v1";
 

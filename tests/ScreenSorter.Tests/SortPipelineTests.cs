@@ -24,6 +24,7 @@ public sealed class SortPipelineTests : IDisposable
     private readonly FakeExampleStore _examples = new();
     private readonly BacklogOptions _backlog = new();
     private readonly BurstOptions _burst = new() { Enabled = false };
+    private readonly LmStudioOptions _lmStudio = LmStudio();
     private readonly SortPipeline _pipeline;
 
     public SortPipelineTests()
@@ -46,7 +47,7 @@ public sealed class SortPipelineTests : IDisposable
         _pipeline = new SortPipeline(store, _focus,
             new RulesEngine(rules, new GameDetector(rules, new NoTitles(), new FixedCatalog())), examples, new WicImageInspector(), _vision,
             new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, Opt(_backlog),
-            new BurstMemory(Opt(_burst)), _embedder, Opt(_burst), TimeProvider.System,
+            new BurstMemory(Opt(_burst)), _embedder, Opt(_burst), Opt(_lmStudio), TimeProvider.System,
             NullLogger<SortPipeline>.Instance);
     }
 
@@ -392,6 +393,52 @@ public sealed class SortPipelineTests : IDisposable
             new VisionWorkItem(Path.Combine(_temp.Path, "gone.png"), null), CancellationToken.None);
 
         Assert.Equal(SortOutcomeKind.Skipped, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task ModelOff_UnplacedFile_GoesToReviewInsteadOfWaiting()
+    {
+        _lmStudio.Enabled = false;
+        FocusOn("notepad.exe");
+
+        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Review, outcome.Kind);
+        Assert.EndsWith(Path.Combine("_Review", "notepad_2026-10-31_21-04-12.png"), outcome.TargetPath);
+        Assert.Equal(0, _vision.Calls);
+    }
+
+    [Fact]
+    public async Task ModelOff_BacklogFile_GoesToReview()
+    {
+        _lmStudio.Enabled = false;
+
+        var outcome = await _pipeline.ProcessAsync(BacklogFile(), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Review, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task ModelOff_RuleAndExampleDisagree_GoesToReview()
+    {
+        _lmStudio.Enabled = false;
+        FocusOn("Discord.exe");
+        _examples.Hits.AddRange(Enumerable.Repeat(new ExampleHit(0.95, "Code", null), 5));
+
+        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Review, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task ModelOff_RulesAndExamplesStillPlaceFiles()
+    {
+        _lmStudio.Enabled = false;
+        FocusOn("Discord.exe");
+
+        var outcome = await _pipeline.ProcessAsync(_temp.File("Screenshot 2026-10-31 210412.png"), CancellationToken.None);
+
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
     }
 
     private async Task<SortOutcome> Queued(string name, int seed, FocusSnapshot? focus = null) =>

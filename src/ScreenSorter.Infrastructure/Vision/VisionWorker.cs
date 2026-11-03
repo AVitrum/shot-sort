@@ -37,6 +37,12 @@ public sealed class VisionWorker(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!lmStudio.Value.Enabled)
+        {
+            logger.LogInformation("The vision model is turned off; unplaced files go to review");
+            return;
+        }
+
         activity.SortNowRequested += OnSortNow;
         try
         {

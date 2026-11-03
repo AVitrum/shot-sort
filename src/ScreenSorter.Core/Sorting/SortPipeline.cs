@@ -19,8 +19,9 @@ namespace ScreenSorter.Core.Sorting;
 /// Files without focus history (backlog) skip the rules and are judged by image content alone; with
 /// <see cref="BacklogOptions.Enabled"/> off they are left in place as <see cref="SortOutcomeKind.Deferred"/>.
 /// Files that neither rules nor examples can place, or where the two disagree, stay in place and
-/// are returned as <see cref="SortOutcomeKind.Queued"/> for the vision queue. A file whose move the user undid stays
-/// where it is, also as <see cref="SortOutcomeKind.Deferred"/>.
+/// are returned as <see cref="SortOutcomeKind.Queued"/> for the vision queue, or go to review with
+/// <see cref="LmStudioOptions.Enabled"/> off. A file whose move the user undid stays where it is, also as
+/// <see cref="SortOutcomeKind.Deferred"/>.
 /// </remarks>
 public sealed class SortPipeline(
     IScreenshotStore store,
@@ -37,6 +38,7 @@ public sealed class SortPipeline(
     BurstMemory burst,
     IImageEmbedder embedder,
     IOptions<BurstOptions> burstOptions,
+    IOptions<LmStudioOptions> lmStudio,
     TimeProvider time,
     ILogger<SortPipeline> logger)
 {
@@ -81,6 +83,10 @@ public sealed class SortPipeline(
                 return await ActAsync(path, rule, snapshot, ct);
             if (rule is null && example is not null)
                 return await ActAsync(path, example, snapshot, ct);
+
+            // With no model to wait for, the user decides, and moving the file teaches the example stage.
+            if (!lmStudio.Value.Enabled)
+                return await ActAsync(path, Classification.Review(_paths.ReviewFolder), snapshot, ct);
 
             // Focus is only a hint: a region snip can show a window that was not focused. On conflict the model decides.
             logger.LogInformation("Queued {Path} for the vision model ({Process}; rule {Rule}, examples {Example})",

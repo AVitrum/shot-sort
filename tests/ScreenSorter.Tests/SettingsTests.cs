@@ -71,6 +71,17 @@ public class SettingsEditModelTests
     [Fact]
     public void Defaults_AreValid() => Assert.Empty(Model().Validate());
 
+    [Fact]
+    public void VisionEnabled_IsReadAndSaved()
+    {
+        var model = Model();
+        Assert.True(model.VisionEnabled);
+
+        model.VisionEnabled = false;
+
+        Assert.False(System.Text.Json.Nodes.JsonNode.Parse(model.ToJson())![LmStudioOptions.Section]![nameof(LmStudioOptions.Enabled)]!.GetValue<bool>());
+    }
+
     [Theory]
     [InlineData("0,85")]
     [InlineData("0.85")]

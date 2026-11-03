@@ -103,6 +103,9 @@ public sealed class SettingsEditModel
     /// <summary>Whether a fullscreen app keeps the vision model from running.</summary>
     public bool SkipWhenFullscreen { get; set; }
 
+    /// <summary>Whether a vision model looks at screenshots the rules and examples could not place.</summary>
+    public bool VisionEnabled { get; set; }
+
     /// <summary>LM Studio's OpenAI-compatible URL.</summary>
     public string LmStudioUrl { get; set; } = "";
 
@@ -148,6 +151,7 @@ public sealed class SettingsEditModel
             NoInputMinutes = Text(idle.NoInputMinutes),
             MaxGpuUtilPercent = idle.MaxGpuUtilPercent.ToString(CultureInfo.InvariantCulture),
             SkipWhenFullscreen = idle.SkipWhenFullscreen,
+            VisionEnabled = lmStudio.Enabled,
             LmStudioUrl = lmStudio.BaseUrl,
             LmStudioModel = lmStudio.Model,
             WindowTitleDays = privacy.WindowTitleDays.ToString(CultureInfo.InvariantCulture),
@@ -271,6 +275,7 @@ public sealed class SettingsEditModel
             },
             [LmStudioOptions.Section] = new JsonObject
             {
+                [nameof(LmStudioOptions.Enabled)] = VisionEnabled,
                 [nameof(LmStudioOptions.BaseUrl)] = LmStudioUrl.Trim(),
                 // LM Studio serves its own API from the same address, so the user edits one URL.
                 [nameof(LmStudioOptions.ManagementUrl)] = $"{url.Scheme}://{url.Authority}/api/v1",

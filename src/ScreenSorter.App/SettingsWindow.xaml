@@ -185,6 +185,10 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
+                                <CheckBox IsChecked="{Binding VisionEnabled}" Margin="0,0,0,4"
+                                          Content="Use a vision model" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,14"
+                                           Text="Needs LM Studio and about 7 GB of free VRAM. When off, screenshots the rules and examples cannot place go to the review folder, and moving them from there teaches the app." />
                                 <TextBlock Style="{StaticResource Heading}" Text="LM Studio URL" Margin="0,0,0,6" />
                                 <TextBox Text="{Binding LmStudioUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,14" />
                                 <TextBlock Style="{StaticResource Heading}" Text="Model" Margin="0,0,0,6" />
