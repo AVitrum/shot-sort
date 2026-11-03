@@ -23,4 +23,7 @@ public enum DecisionStage
 
     /// <summary>The user undid the app's move. The file is left alone until the user moves it themselves.</summary>
     Undone,
+
+    /// <summary>Copied from a near-identical screenshot the model placed around the same time, without asking the model again.</summary>
+    Burst,
 }

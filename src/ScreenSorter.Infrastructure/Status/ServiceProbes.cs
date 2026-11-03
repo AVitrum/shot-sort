@@ -45,6 +45,9 @@ public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IVisionSer
     /// <inheritdoc />
     public async Task<ServiceCheck> CheckAsync(CancellationToken ct)
     {
+        if (!options.Value.Enabled)
+            return new ServiceCheck(Name, ServiceState.Ok, "Not used. Screenshots the rules and examples cannot place go to the review folder.");
+
         var model = options.Value.Model;
         var waiting = queue.Count;
         try

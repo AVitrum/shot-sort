@@ -69,8 +69,10 @@ end;
 
 #ifdef SmokeTest
 [Run]
-; Proves when the entry fires without starting a copy that would sort the real screenshots folder.
-Filename: "{cmd}"; Parameters: "/c echo restarted> ""{app}\restarted.txt"""; Flags: runhidden; Check: StartAfterUpdate
+; Really starts the new version, as a real update does, but every path it uses is beside the install folder, so this copy
+; can never sort the real screenshots folder.
+#define SmokeData "{app}\..\data-smoke"
+Filename: "{app}\ScreenSorter.App.exe"; Parameters: "--Paths:WatchFolders:0=""{#SmokeData}\shots"" --Paths:SortedRoot=""{#SmokeData}\shots"" --Paths:DatabasePath=""{#SmokeData}\test.db"" --Paths:LogFolder=""{#SmokeData}\logs"" --Paths:UserSettingsPath=""{#SmokeData}\settings.json"" --Clip:ModelPath=""{#SmokeData}\none.onnx"" --Clip:ModelUrl=http://127.0.0.1:9/none --LmStudio:Enabled=false --Updates:Enabled=false"; Flags: nowait; Check: StartAfterUpdate
 #else
 [Tasks]
 Name: "autostart"; Description: "Start ScreenSorter with Windows"; Flags: unchecked

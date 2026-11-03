@@ -23,6 +23,19 @@ public class LmStudioProbeTests
         Opt(new LmStudioOptions { ManagementUrl = "http://lm.test/api/v1", Model = Model }), Opt(new StatusOptions()));
 
     [Fact]
+    public async Task TurnedOff_IsFine_AndAsksNothing()
+    {
+        var handler = new Refuse();
+        var probe = new LmStudioProbe(new HttpClient(handler), _queue, _starter, Opt(new LmStudioOptions { Enabled = false }), Opt(new StatusOptions()));
+
+        var check = await probe.CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ServiceState.Ok, check.State);
+        Assert.False(check.NeedsAttention);
+        Assert.Contains("Not used", check.Detail);
+    }
+
+    [Fact]
     public async Task Unreachable_ButStartable_IsNotAProblem()
     {
         _starter.CanStart = true;

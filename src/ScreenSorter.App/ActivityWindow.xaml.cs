@@ -271,6 +271,7 @@ public partial class ActivityWindow : Window
         DecisionStage.Rule => "App rules",
         DecisionStage.Example => "Your examples",
         DecisionStage.Vision => "Vision model",
+        DecisionStage.Burst => "Copied from a similar shot",
         DecisionStage.ImageCheck => "Blank image check",
         _ => stage.ToString(),
     };

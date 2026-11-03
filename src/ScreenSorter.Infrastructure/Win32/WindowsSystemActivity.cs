@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Globalization;
 using Microsoft.Extensions.Logging;
 using ScreenSorter.Core.Idle;
 using static ScreenSorter.Infrastructure.Win32.IdleNativeMethods;
@@ -9,15 +7,25 @@ namespace ScreenSorter.Infrastructure.Win32;
 /// <summary>
 /// <see cref="ISystemActivity"/> for Windows: <c>GetLastInputInfo</c>, fullscreen detection
 /// (<c>SHQueryUserNotificationState</c> plus "foreground window covers its monitor"), and GPU load from
-/// NVML with <c>nvidia-smi</c> as fallback. Thread-safe.
+/// NVML where the NVIDIA driver provides it, with the Windows GPU counters for every other case. Thread-safe.
 /// </summary>
-public sealed class WindowsSystemActivity(ILogger<WindowsSystemActivity> logger) : ISystemActivity, IDisposable
+public sealed class WindowsSystemActivity : ISystemActivity, IDisposable
 {
-    private static readonly TimeSpan SmiTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan NvmlRetry = TimeSpan.FromMinutes(5);
     private readonly Lock _gate = new();
+    private readonly RecoveringGpuReader _nvml;
+    private readonly PdhGpuLoad _counters;
     private nint[]? _nvmlDevices;
-    private bool _nvmlFailed;
-    private bool _smiFailed;
+    private bool _nvmlStarted;
+
+    /// <summary>Creates the reader. Nothing is loaded until the first GPU reading.</summary>
+    /// <param name="time">The clock for retrying NVML.</param>
+    /// <param name="logger">Receives one line per GPU reading problem.</param>
+    public WindowsSystemActivity(TimeProvider time, ILogger<WindowsSystemActivity> logger)
+    {
+        _nvml = new RecoveringGpuReader(ReadNvml, ShutDownNvml, NvmlRetry, time, logger);
+        _counters = new PdhGpuLoad(logger);
+    }
 
     /// <inheritdoc />
     public TimeSpan TimeSinceLastInput()
@@ -54,7 +62,7 @@ public sealed class WindowsSystemActivity(ILogger<WindowsSystemActivity> logger)
     {
         lock (_gate)
         {
-            return ReadNvml() ?? ReadNvidiaSmi();
+            return _nvml.Read() ?? _counters.Read();
         }
     }
 
@@ -62,71 +70,37 @@ public sealed class WindowsSystemActivity(ILogger<WindowsSystemActivity> logger)
     public void Dispose()
     {
         lock (_gate)
-        {
-            if (_nvmlDevices is not null)
-                NvmlNativeMethods.Shutdown();
-            _nvmlDevices = null;
-        }
+            ShutDownNvml();
     }
 
-    private int? ReadNvml()
+    private int ReadNvml()
     {
-        if (_nvmlFailed)
-            return null;
-        try
+        if (_nvmlDevices is null)
         {
-            if (_nvmlDevices is null)
-            {
-                Check(NvmlNativeMethods.Init(), "nvmlInit_v2");
-                Check(NvmlNativeMethods.DeviceGetCount(out var count), "nvmlDeviceGetCount_v2");
-                var devices = new nint[count];
-                for (uint i = 0; i < count; i++)
-                    Check(NvmlNativeMethods.DeviceGetHandleByIndex(i, out devices[i]), "nvmlDeviceGetHandleByIndex_v2");
-                _nvmlDevices = devices;
-            }
+            Check(NvmlNativeMethods.Init(), "nvmlInit_v2");
+            _nvmlStarted = true;
+            Check(NvmlNativeMethods.DeviceGetCount(out var count), "nvmlDeviceGetCount_v2");
+            var devices = new nint[count];
+            for (uint i = 0; i < count; i++)
+                Check(NvmlNativeMethods.DeviceGetHandleByIndex(i, out devices[i]), "nvmlDeviceGetHandleByIndex_v2");
+            _nvmlDevices = devices;
+        }
 
-            var max = 0;
-            foreach (var device in _nvmlDevices)
-            {
-                Check(NvmlNativeMethods.DeviceGetUtilizationRates(device, out var u), "nvmlDeviceGetUtilizationRates");
-                max = Math.Max(max, (int)u.Gpu);
-            }
-            return max;
-        }
-        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
+        var max = 0;
+        foreach (var device in _nvmlDevices)
         {
-            _nvmlFailed = true;
-            logger.LogWarning(ex, "NVML unavailable; falling back to nvidia-smi");
-            return null;
+            Check(NvmlNativeMethods.DeviceGetUtilizationRates(device, out var u), "nvmlDeviceGetUtilizationRates");
+            max = Math.Max(max, (int)u.Gpu);
         }
+        return max;
     }
 
-    private int? ReadNvidiaSmi()
+    private void ShutDownNvml()
     {
-        if (_smiFailed)
-            return null;
-        try
-        {
-            using var p = Process.Start(new ProcessStartInfo("nvidia-smi", "--query-gpu=utilization.gpu --format=csv,noheader,nounits")
-            {
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            })!;
-            var output = p.StandardOutput.ReadToEnd();
-            if (!p.WaitForExit(SmiTimeout) || p.ExitCode != 0)
-                throw new InvalidOperationException($"nvidia-smi exit code {(p.HasExited ? p.ExitCode : -1)}");
-            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(l => int.Parse(l, CultureInfo.InvariantCulture))
-                .DefaultIfEmpty(0)
-                .Max();
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or FormatException)
-        {
-            _smiFailed = true;
-            logger.LogWarning(ex, "nvidia-smi unavailable; GPU load is ignored by the idle check");
-            return null;
-        }
+        if (_nvmlStarted)
+            NvmlNativeMethods.Shutdown();
+        _nvmlStarted = false;
+        _nvmlDevices = null;
     }
 
     private static bool IsDesktopClass(nint hwnd)

@@ -86,10 +86,13 @@ internal sealed class FakeEmbedder : ScreenSorter.Core.Examples.IImageEmbedder
 {
     public int Calls { get; private set; }
 
+    /// <summary>What to answer for a path; the same vector for every file by default.</summary>
+    public Func<string, float[]> Answer { get; set; } = _ => [1, 0];
+
     public Task<float[]> EmbedAsync(string imagePath, CancellationToken ct)
     {
         Calls++;
-        return Task.FromResult(new float[] { 1, 0 });
+        return Task.FromResult(Answer(imagePath));
     }
 }
 

@@ -28,7 +28,7 @@ Each new screenshot goes through these stages:
 1. **Black or blank image:** goes to `_Review`. Failed fullscreen captures often look like this.
 2. **Focused window:** the app remembers which window had focus when the snip was taken. Rules in `appsettings.json` map apps to folders, and games are recognized by their install folder or exe name. This takes no model and is instant.
 3. **Confirmed examples:** the screenshot is compared with examples learned from your corrections, using CLIP image embeddings stored in the app's own database.
-4. **Vision model:** if the rules and examples can't place it, or they disagree, the file waits for the local vision model. The model runs only when the PC is idle: no input for 5 minutes, no fullscreen app, low GPU load. It is unloaded as soon as the work is done.
+4. **Vision model:** if the rules and examples can't place it, or they disagree, the file waits for the local vision model. The model runs only when the PC is idle: no input for 5 minutes, no fullscreen app, low GPU load. It is unloaded as soon as the work is done. A nearly identical shot taken within five minutes, with the same app in focus, copies the model's answer instead of asking again.
 
 ## Teaching it
 
@@ -50,7 +50,7 @@ Right-click the tray icon for Pause/Resume, Sort now (process waiting files with
 
 Uninstalling from Windows Settings removes the app and asks whether to delete `%LOCALAPPDATA%\ScreenSorter` too. Your screenshots stay either way. A silent uninstall keeps the data. If you delete it and install again, the app treats files already sorted as placed by you.
 
-New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. The installer is not code-signed. The app checks each download against the SHA-256 published with the release, which catches a damaged file but not a compromised release.
+New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. The installer is not code-signed, so SmartScreen still warns on a manual download. Automatic updates have their own protection: the app installs a download only if its SHA-256 matches a checksum file signed with a key that is kept off GitHub, so controlling a release is not enough to run code on your PC.
 
 ### Optional helper
 
@@ -59,9 +59,9 @@ New versions install by themselves when the PC is idle, nothing waits to be sort
 | Rules and learning from corrections | Nothing more; they work out of the box |
 | Vision model | [LM Studio](https://lmstudio.ai/) with a vision model downloaded, and about 7 GB of free VRAM |
 
-Without LM Studio, files no rule or example can place stay in the screenshots folder until it is available.
+Without LM Studio, files no rule or example can place stay in the screenshots folder until it is available. To do without it, untick **Use a vision model** under **Settings > Vision model**: those files then go straight to `_Review`, and moving them from there teaches the app. A file already waiting goes to `_Review` the next time the app starts.
 
-In LM Studio, download the model named under **Vision model** in Settings. When a screenshot needs the model and the PC is idle, ScreenSorter starts LM Studio's server with `lms server start` and leaves it running. To start it yourself instead, set `LmStudio:AutoStartServer` to `false` in `%LOCALAPPDATA%\ScreenSorter\settings.json`.
+In LM Studio, download the model named under **Vision model** in Settings. When a screenshot needs the model and the PC is idle, ScreenSorter starts LM Studio's server with `lms server start` and leaves it running. If that fails, **Status** says so and the files keep waiting: open LM Studio and start its server. To always start it yourself, set `LmStudio:AutoStartServer` to `false` in `%LOCALAPPDATA%\ScreenSorter\settings.json`.
 
 On first run the app downloads the CLIP image model (352 MB) from Hugging Face and checks it against a pinned SHA-256.
 
@@ -142,7 +142,18 @@ To build the installer locally (`artifacts/installer`):
 ./installer/build-installer.ps1
 ```
 
-Pushing a tag such as `v1.2.3` builds it on GitHub and attaches it to a draft release.
+A build for release needs `Updates:PublicKey` set in `appsettings.json`. Create the key once, on the machine you release from, and keep a copy of the key file and its passphrase somewhere safe. Without them, installed copies can never update by themselves again:
+
+```powershell
+dotnet run installer/release-key.cs -- new
+```
+
+Pushing a tag such as `v1.2.3` builds the installer on GitHub and attaches it to a draft release. Read the draft over, then sign and publish it from that machine:
+
+```powershell
+./installer/sign-release.ps1 -Tag v1.2.3
+gh release edit v1.2.3 --draft=false
+```
 
 ## License
 

@@ -5,6 +5,9 @@
 // check Thresholds:ExampleSimilarity. Downloads the CLIP model if it is missing.
 // --Probe:Mode=evaluate: for a sorted root, holds out each screenshot the user confirmed and judges it by the others,
 // at a range of thresholds, to tune Thresholds:ExampleSimilarity and ExampleAgreement. Reads only.
+// --Probe:Mode=burst: for a sorted root, replays each screenshot the user confirmed in capture order and counts how often
+// copying the folder of a near-identical earlier shot would be right, to tune the Burst settings. Reads only.
+// --Probe:Mode=gpu: prints the GPU load from NVML and from the Windows counters, to compare them. Reads only.
 // --Probe:Mode=rule --Probe:Exe=<path>: prints what the rules do for a focused exe, with the real config and catalog.
 // --Probe:Mode=rename-sorted: one-time cleanup for a sorted root (the folder argument). Lists generated names in
 // category folders that differ from the name the decision log holds for their folder, and what they would become.
@@ -61,31 +64,91 @@ if (string.Equals(builder.Configuration["Probe:Mode"], "rename-sorted", StringCo
     return await RenameSortedAsync();
 if (string.Equals(builder.Configuration["Probe:Mode"], "evaluate", StringComparison.OrdinalIgnoreCase))
     return await EvaluateAsync();
+if (string.Equals(builder.Configuration["Probe:Mode"], "burst", StringComparison.OrdinalIgnoreCase))
+    return await EvaluateBurstsAsync();
+if (string.Equals(builder.Configuration["Probe:Mode"], "gpu", StringComparison.OrdinalIgnoreCase))
+{
+    var activity = host.Services.GetRequiredService<ScreenSorter.Core.Idle.ISystemActivity>();
+    var counters = new ScreenSorter.Infrastructure.Win32.PdhGpuLoad(host.Services.GetRequiredService<ILogger<ScreenSorter.Infrastructure.Win32.PdhGpuLoad>>());
+    for (var i = 0; i < 5; i++)
+    {
+        var watch = Stopwatch.StartNew();
+        var fromCounters = counters.Read();
+        Console.WriteLine($"NVML or fallback: {activity.GpuUtilizationPercent()}%  Windows counters: {fromCounters}% ({watch.ElapsedMilliseconds} ms)");
+    }
+    return 0;
+}
 return await ClassifyAsync();
 
-async Task<int> EvaluateAsync()
+// Every screenshot under the root that the user confirmed, with its label and embedding.
+async Task<List<(string File, string Category, string? Sub, float[] Vector, DateTime Captured, string? Process)>> LoadConfirmedAsync(string root, bool alsoVision = false)
 {
     var modelFile = host.Services.GetRequiredService<ClipModelFile>();
     await modelFile.StartAsync(CancellationToken.None);
     await modelFile.ExecuteTask!;
 
-    var root = Path.GetFullPath(args[0]);
     var store = host.Services.GetRequiredService<IScreenshotStore>();
     var log = host.Services.GetRequiredService<IDecisionLog>();
     var embedder = host.Services.GetRequiredService<IImageEmbedder>();
-    var topK = builder.Configuration.GetValue($"{ExamplesOptions.Section}:{nameof(ExamplesOptions.TopK)}", 5);
 
-    var confirmed = new List<(string File, string Category, string? Sub, float[] Vector)>();
+    var confirmed = new List<(string File, string Category, string? Sub, float[] Vector, DateTime Captured, string? Process)>();
     foreach (var file in Directory.EnumerateDirectories(root).SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories)).Where(IsImage).Order())
     {
         var record = await log.FindLatestByHashAsync(await store.ComputeHashAsync(file, CancellationToken.None), CancellationToken.None);
         var label = CorrectionProcessor.LabelOf(root, file);
-        if (record?.Classification.Stage != ScreenSorter.Core.Models.DecisionStage.UserCorrection || label is null
+        var stage = record?.Classification.Stage;
+        if ((stage != ScreenSorter.Core.Models.DecisionStage.UserCorrection && !(alsoVision && stage == ScreenSorter.Core.Models.DecisionStage.Vision)) || label is null
             || string.Equals(label.Value.Category, builder.Configuration[$"{PathsOptions.Section}:{nameof(PathsOptions.ReviewFolder)}"], StringComparison.OrdinalIgnoreCase))
             continue;
-        confirmed.Add((file, label.Value.Category, label.Value.SubFolder, await embedder.EmbedAsync(file, CancellationToken.None)));
+        confirmed.Add((file, label.Value.Category, label.Value.SubFolder, await embedder.EmbedAsync(file, CancellationToken.None),
+            CaptureTime.FromFileName(file) ?? store.GetCreationTime(file).LocalDateTime, record?.Focus?.ProcessName));
     }
     Console.WriteLine($"Confirmed examples: {confirmed.Count} in {confirmed.Select(c => $"{c.Category}/{c.Sub}").Distinct().Count()} folders");
+    return confirmed;
+}
+
+async Task<int> EvaluateBurstsAsync()
+{
+    // With Probe:AlsoVision, files the model placed and the user kept count too: closer to what reaches the model, but "right" then means "kept".
+    var confirmed = (await LoadConfirmedAsync(Path.GetFullPath(args[0]), builder.Configuration.GetValue<bool>("Probe:AlsoVision"))).OrderBy(c => c.Captured).ToList();
+    Console.WriteLine("window-s similarity  reused  coverage  right  precision");
+    foreach (var window in new[] { 30, 60, 120, 300, 600 })
+    {
+        foreach (var similarity in new[] { 0.90, 0.92, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99 })
+        {
+            // Same scheme as the app: a file nothing matches stands for a model answer, and only those can be copied.
+            var anchors = new List<int>();
+            int reused = 0, right = 0;
+            for (var i = 0; i < confirmed.Count; i++)
+            {
+                var c = confirmed[i];
+                var best = anchors
+                    .Where(a => (c.Captured - confirmed[a].Captured).TotalSeconds <= window
+                        && string.Equals(c.Process, confirmed[a].Process, StringComparison.OrdinalIgnoreCase))
+                    .Select(a => (Anchor: a, Score: c.Vector.Zip(confirmed[a].Vector, (x, y) => (double)x * y).Sum()))
+                    .Where(x => x.Score >= similarity)
+                    .OrderByDescending(x => x.Score)
+                    .FirstOrDefault(x => true, (Anchor: -1, Score: 0d));
+                if (best.Anchor < 0)
+                {
+                    anchors.Add(i);
+                    continue;
+                }
+                reused++;
+                if (string.Equals(c.Category, confirmed[best.Anchor].Category, StringComparison.OrdinalIgnoreCase)
+                    && SortedPathBuilder.MatchKey(c.Sub ?? "") == SortedPathBuilder.MatchKey(confirmed[best.Anchor].Sub ?? ""))
+                    right++;
+            }
+            Console.WriteLine($"{window,8} {similarity,10:0.00} {reused,7} {(double)reused / Math.Max(1, confirmed.Count),9:P0} {right,6} {(double)right / Math.Max(1, reused),10:P1}");
+        }
+    }
+    return 0;
+}
+
+async Task<int> EvaluateAsync()
+{
+    var topK = builder.Configuration.GetValue($"{ExamplesOptions.Section}:{nameof(ExamplesOptions.TopK)}", 5);
+    var confirmed = await LoadConfirmedAsync(Path.GetFullPath(args[0]));
 
     // Each file is held out and judged by all the others, the way a new screenshot is judged by stored examples.
     var neighbours = confirmed.Select((c, i) => confirmed.Where((_, j) => j != i)
