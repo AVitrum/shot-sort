@@ -180,7 +180,8 @@ public sealed class VisionWorkerEjectTests : IDisposable
             new RulesEngine(rules, new GameDetector(rules, new FixedTitles(), new FixedCatalog())),
             new ExampleClassifier(new FakeEmbedder(), new FakeExampleStore(), Opt(new ExamplesOptions()), thresholds, NullLogger<ExampleClassifier>.Instance),
             new WicImageInspector(), _vision, new VisionMapper(lmStudio, rules, thresholds, paths, new FixedCatalog()),
-            new SqliteDecisionLog(paths, Opt(new PrivacyOptions())), paths, thresholds, Opt(new BacklogOptions()), TimeProvider.System, NullLogger<SortPipeline>.Instance);
+            new SqliteDecisionLog(paths, Opt(new PrivacyOptions())), paths, thresholds, Opt(new BacklogOptions()),
+            new BurstMemory(Opt(new BurstOptions())), new FakeEmbedder(), Opt(new BurstOptions { Enabled = false }), TimeProvider.System, NullLogger<SortPipeline>.Instance);
         _worker = new VisionWorker(_queue, pipeline, _vision, _starter,
             new IdleDetector(_activity, Opt(new IdleOptions { NoInputMinutes = 5, MaxGpuUtilPercent = 20 })),
             _sort, Opt(new IdleOptions { CheckIntervalSeconds = 5 }), lmStudio, NullLogger<VisionWorker>.Instance);

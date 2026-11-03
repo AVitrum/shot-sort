@@ -23,6 +23,7 @@ public sealed class SortPipelineTests : IDisposable
     private readonly FakeEmbedder _embedder = new();
     private readonly FakeExampleStore _examples = new();
     private readonly BacklogOptions _backlog = new();
+    private readonly BurstOptions _burst = new() { Enabled = false };
     private readonly SortPipeline _pipeline;
 
     public SortPipelineTests()
@@ -44,7 +45,8 @@ public sealed class SortPipelineTests : IDisposable
         var examples = new ExampleClassifier(_embedder, _examples, Opt(new ExamplesOptions()), thresholds, NullLogger<ExampleClassifier>.Instance);
         _pipeline = new SortPipeline(store, _focus,
             new RulesEngine(rules, new GameDetector(rules, new NoTitles(), new FixedCatalog())), examples, new WicImageInspector(), _vision,
-            new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, Opt(_backlog), TimeProvider.System,
+            new VisionMapper(Opt(LmStudio()), rules, thresholds, paths, new FixedCatalog("Hades", "Deadlock")), _log, paths, thresholds, Opt(_backlog),
+            new BurstMemory(Opt(_burst)), _embedder, Opt(_burst), TimeProvider.System,
             NullLogger<SortPipeline>.Instance);
     }
 
@@ -392,6 +394,119 @@ public sealed class SortPipelineTests : IDisposable
         Assert.Equal(SortOutcomeKind.Skipped, outcome.Kind);
     }
 
+    private async Task<SortOutcome> Queued(string name, int seed, FocusSnapshot? focus = null) =>
+        await _pipeline.ProcessQueuedAsync(new VisionWorkItem(_temp.File(name, seed), focus), CancellationToken.None);
+
+    private async Task<SortOutcome> PlacedByModel(string name, int seed, FocusSnapshot? focus = null)
+    {
+        _burst.Enabled = true;
+        _vision.Result = new VisionResult("Browser", "", "", 0.9);
+        return await Queued(name, seed, focus);
+    }
+
+    [Fact]
+    public async Task Burst_NearIdenticalShot_CopiesTheAnswerWithoutTheModel()
+    {
+        await PlacedByModel("Screenshot 2026-10-31 210412.png", 1);
+
+        var outcome = await Queued("Screenshot 2026-10-31 210500.png", 2);
+
+        Assert.Equal(1, _vision.Calls);
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
+        Assert.StartsWith(Path.Combine(_temp.Path, "Browser"), outcome.TargetPath);
+        var hash = await new FileSystemScreenshotStore(Opt(new IntakeOptions()), TimeProvider.System).ComputeHashAsync(outcome.TargetPath!, CancellationToken.None);
+        Assert.Equal(DecisionStage.Burst, (await _log.FindLatestByHashAsync(hash, CancellationToken.None))?.Classification.Stage);
+    }
+
+    [Fact]
+    public async Task Burst_CopiesAreNotCopied_SoOneAnswerCannotCarryForever()
+    {
+        await PlacedByModel("Screenshot 2026-10-31 210000.png", 1);
+        await Queued("Screenshot 2026-10-31 210400.png", 2);
+
+        // Within the window of the copy, but not of the model's answer.
+        await Queued("Screenshot 2026-10-31 210800.png", 3);
+
+        Assert.Equal(2, _vision.Calls);
+    }
+
+    [Fact]
+    public async Task Burst_OutsideTheWindow_AsksTheModel()
+    {
+        await PlacedByModel("Screenshot 2026-10-31 210000.png", 1);
+
+        await Queued("Screenshot 2026-10-31 211000.png", 2);
+
+        Assert.Equal(2, _vision.Calls);
+    }
+
+    [Fact]
+    public async Task Burst_AnotherAppInFocus_AsksTheModel()
+    {
+        await PlacedByModel("Screenshot 2026-10-31 210000.png", 1, Focus("notepad.exe"));
+
+        await Queued("Screenshot 2026-10-31 210010.png", 2, Focus("mspaint.exe"));
+
+        Assert.Equal(2, _vision.Calls);
+    }
+
+    [Fact]
+    public async Task Burst_DifferentPicture_AsksTheModel()
+    {
+        await PlacedByModel("Screenshot 2026-10-31 210000.png", 1);
+        _embedder.Answer = _ => [0, 1];
+
+        await Queued("Screenshot 2026-10-31 210010.png", 2);
+
+        Assert.Equal(2, _vision.Calls);
+    }
+
+    [Fact]
+    public async Task Burst_ReviewAnswer_IsNotCopied()
+    {
+        _burst.Enabled = true;
+        _vision.Result = null;
+        await Queued("Screenshot 2026-10-31 210000.png", 1);
+
+        await Queued("Screenshot 2026-10-31 210010.png", 2);
+
+        Assert.Equal(2, _vision.Calls);
+    }
+
+    [Fact]
+    public async Task Burst_AnswerTheUserCorrected_IsNotCopied()
+    {
+        var first = await PlacedByModel("Screenshot 2026-10-31 210000.png", 1);
+        var hash = await new FileSystemScreenshotStore(Opt(new IntakeOptions()), TimeProvider.System).ComputeHashAsync(first.TargetPath!, CancellationToken.None);
+        await _log.RecordAsync(new SortRecord(first.TargetPath!, first.TargetPath!, hash, new Classification("Chat", null, "Chat", 1, DecisionStage.UserCorrection), null, DateTimeOffset.UtcNow), CancellationToken.None);
+
+        await Queued("Screenshot 2026-10-31 210010.png", 2);
+
+        Assert.Equal(2, _vision.Calls);
+    }
+
+    [Fact]
+    public async Task Burst_NoEmbedding_AsksTheModel()
+    {
+        await PlacedByModel("Screenshot 2026-10-31 210000.png", 1);
+        _embedder.Answer = _ => throw new ExamplesUnavailableException("no model");
+
+        var outcome = await Queued("Screenshot 2026-10-31 210010.png", 2);
+
+        Assert.Equal(2, _vision.Calls);
+        Assert.Equal(SortOutcomeKind.Sorted, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task Burst_Off_NeverEmbeds()
+    {
+        _vision.Result = new VisionResult("Browser", "", "", 0.9);
+        await Queued("Screenshot 2026-10-31 210000.png", 1);
+        await Queued("Screenshot 2026-10-31 210010.png", 2);
+
+        Assert.Equal((2, 0), (_vision.Calls, _embedder.Calls));
+    }
+
     internal static LmStudioOptions LmStudio() => new()
     {
         Categories = new(StringComparer.OrdinalIgnoreCase)
@@ -412,9 +527,11 @@ public sealed class SortPipelineTests : IDisposable
         public VisionResult? Result { get; set; }
         public bool Throw { get; set; }
         public FocusSnapshot? LastHint { get; private set; }
+        public int Calls { get; private set; }
 
         public Task<VisionResult?> ClassifyAsync(string imagePath, FocusSnapshot? hint, CancellationToken ct)
         {
+            Calls++;
             LastHint = hint;
             return Throw ? throw new VisionUnavailableException("down") : Task.FromResult(Result);
         }

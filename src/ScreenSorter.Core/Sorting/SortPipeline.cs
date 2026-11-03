@@ -12,7 +12,8 @@ namespace ScreenSorter.Core.Sorting;
 /// <summary>
 /// Processes screenshots in two stages. <see cref="ProcessAsync"/> (instant): wait for the file,
 /// look up focus, reject black images, apply rules and confirmed examples. <see cref="ProcessQueuedAsync"/>
-/// (when idle): ask the vision model. Both end in the same move-rename-log step.
+/// (when idle): copy the answer for a near-identical shot if there is one, otherwise ask the vision model. Both end in
+/// the same move-rename-log step.
 /// </summary>
 /// <remarks>
 /// Files without focus history (backlog) skip the rules and are judged by image content alone; with
@@ -33,6 +34,9 @@ public sealed class SortPipeline(
     IOptions<PathsOptions> paths,
     IOptions<ThresholdsOptions> thresholds,
     IOptions<BacklogOptions> backlog,
+    BurstMemory burst,
+    IImageEmbedder embedder,
+    IOptions<BurstOptions> burstOptions,
     TimeProvider time,
     ILogger<SortPipeline> logger)
 {
@@ -107,6 +111,14 @@ public sealed class SortPipeline(
                 return new SortOutcome(SortOutcomeKind.Skipped, item.Path);
             }
 
+            var captured = CaptureTime.FromFileName(item.Path) ?? store.GetCreationTime(item.Path).LocalDateTime;
+            var vector = await TryEmbedForBurstAsync(item.Path, ct);
+            if (vector is not null && await TryCopyAnswerAsync(vector, captured, item.Focus, ct) is { } copied)
+            {
+                logger.LogInformation("Copied the answer for a near-identical shot to {Path} ({Similarity:0.000})", item.Path, copied.Confidence);
+                return await ActAsync(item.Path, copied, item.Focus, ct);
+            }
+
             VisionResult? result;
             try
             {
@@ -118,7 +130,14 @@ public sealed class SortPipeline(
                 result = null;
             }
             logger.LogInformation("Vision answer for {Path}: {Result}", item.Path, (object?)result ?? "unusable");
-            return await ActAsync(item.Path, visionMapper.Map(result), item.Focus, ct);
+
+            var classification = visionMapper.Map(result);
+            var hash = vector is null ? null : await store.ComputeHashAsync(item.Path, ct);
+            var outcome = await ActAsync(item.Path, classification, item.Focus, ct);
+            // An empty answer or a review is no opinion to copy: a neighbour deserves its own chance with the model.
+            if (hash is not null && outcome.Kind == SortOutcomeKind.Sorted)
+                burst.Remember(new BurstAnchor(vector!, captured, item.Focus?.ProcessName, hash, classification));
+            return outcome;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -138,6 +157,35 @@ public sealed class SortPipeline(
             logger.LogWarning(ex, "{Path} is not a decodable image", path);
             return null;
         }
+    }
+
+    // Without an embedding the file simply goes to the model, as it always did.
+    private async Task<float[]?> TryEmbedForBurstAsync(string path, CancellationToken ct)
+    {
+        if (!burstOptions.Value.Enabled)
+            return null;
+        try
+        {
+            return await embedder.EmbedAsync(path, ct);
+        }
+        catch (Exception ex) when (ex is ExamplesUnavailableException or InvalidDataException)
+        {
+            logger.LogDebug(ex, "No embedding for {Path}; it goes to the model", path);
+            return null;
+        }
+    }
+
+    private async Task<Classification?> TryCopyAnswerAsync(float[] vector, DateTime captured, FocusSnapshot? focus, CancellationToken ct)
+    {
+        while (burst.Find(vector, captured, focus?.ProcessName) is { } match)
+        {
+            // A folder the user has since corrected is exactly the answer that must not spread.
+            var latest = await log.FindLatestByHashAsync(match.Anchor.FileHash, ct);
+            if (latest?.Classification.Stage == DecisionStage.Vision)
+                return match.Anchor.Classification with { Stage = DecisionStage.Burst, Confidence = match.Similarity };
+            burst.Forget(match.Anchor);
+        }
+        return null;
     }
 
     private static bool SameFolder(Classification a, Classification b) =>

@@ -170,6 +170,8 @@ public sealed class DecisionHistory(
                 return $"It looks like examples you taught it ({c.Confidence:0.00} similar).";
             case DecisionStage.Vision:
                 return inReview ? "The vision model was not sure, or named a game that is not on your list." : "The vision model chose this folder.";
+            case DecisionStage.Burst:
+                return $"It is nearly the same as a shot taken around the same time, which the vision model placed here ({c.Confidence:0.00} similar).";
             case DecisionStage.ImageCheck:
                 return "The image is blank or could not be read.";
             case DecisionStage.Unmatched:

@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.Configure<ExamplesOptions>(configuration.GetSection(ExamplesOptions.Section));
         services.Configure<CorrectionsOptions>(configuration.GetSection(CorrectionsOptions.Section));
         services.Configure<BacklogOptions>(configuration.GetSection(BacklogOptions.Section));
+        services.Configure<BurstOptions>(configuration.GetSection(BurstOptions.Section));
         services.Configure<NotificationsOptions>(configuration.GetSection(NotificationsOptions.Section));
         services.Configure<StatusOptions>(configuration.GetSection(StatusOptions.Section));
         services.Configure<PrivacyOptions>(configuration.GetSection(PrivacyOptions.Section));
@@ -87,6 +88,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ExampleClassifier>();
         services.AddSingleton<CorrectionProcessor>();
         services.AddSingleton<ExampleRebuilder>();
+        services.AddSingleton<BurstMemory>();
         services.AddSingleton<SortPipeline>();
         services.AddSingleton<DecisionHistory>();
         // No client timeout: the installer download takes minutes. Asking for the version has its own limit.
