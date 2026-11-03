@@ -18,6 +18,8 @@ jobs:
           dotnet-version: 10.0.402
       - name: Build
         run: dotnet build ScreenSorter.slnx -c Release -nologo -warnaserror
+      - name: Build the release signing tool
+        run: dotnet build installer/release-key.cs
       - name: Test
         run: dotnet test ScreenSorter.slnx -c Release --no-build -nologo
 

@@ -39,6 +39,12 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Version must look like 1.2.3, not '$Version'."
 }
 
+# A release without the key could never update again, so catch it here and not after it ships.
+$settings = Get-Content (Join-Path $repo 'src\ScreenSorter.App\appsettings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if (-not $SmokeTest -and -not $settings.Updates.PublicKey) {
+    throw 'Updates:PublicKey is empty. Create the key with: dotnet run installer/release-key.cs -- new'
+}
+
 $iscc = Join-Path $tools 'tools\ISCC.exe'
 if (-not (Test-Path $iscc)) {
     New-Item -ItemType Directory -Force $tools | Out-Null

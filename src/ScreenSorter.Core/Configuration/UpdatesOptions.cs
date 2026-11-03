@@ -15,6 +15,12 @@ public sealed class UpdatesOptions
     /// <summary>Repository that publishes the releases, as <c>owner/name</c>.</summary>
     public string Repository { get; set; } = "AVitrum/shot-sort";
 
+    /// <summary>
+    /// The key releases must be signed with: base64 SubjectPublicKeyInfo of an ECDSA P-256 key. Empty means nothing can
+    /// be verified, so nothing is installed.
+    /// </summary>
+    public string PublicKey { get; set; } = "";
+
     /// <summary>Time between looks for a new version.</summary>
     public int CheckIntervalHours { get; set; } = 24;
 

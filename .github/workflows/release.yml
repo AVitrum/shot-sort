@@ -1,4 +1,6 @@
-# Pushing a tag such as v1.2.3 builds the installer and attaches it to a draft release, to read over and publish by hand.
+# Pushing a tag such as v1.2.3 builds the installer and attaches it to a draft release, to read over, sign and publish by
+# hand. Signing happens off GitHub, with installer/sign-release.ps1, because the key must not be here: installed copies
+# refuse a release without that signature.
 name: Release
 
 on:

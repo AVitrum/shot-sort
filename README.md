@@ -50,7 +50,7 @@ Right-click the tray icon for Pause/Resume, Sort now (process waiting files with
 
 Uninstalling from Windows Settings removes the app and asks whether to delete `%LOCALAPPDATA%\ScreenSorter` too. Your screenshots stay either way. A silent uninstall keeps the data. If you delete it and install again, the app treats files already sorted as placed by you.
 
-New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. The installer is not code-signed. The app checks each download against the SHA-256 published with the release, which catches a damaged file but not a compromised release.
+New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. The installer is not code-signed, so SmartScreen still warns on a manual download. Automatic updates have their own protection: the app installs a download only if its SHA-256 matches a checksum file signed with a key that is kept off GitHub, so controlling a release is not enough to run code on your PC.
 
 ### Optional helper
 
@@ -142,7 +142,18 @@ To build the installer locally (`artifacts/installer`):
 ./installer/build-installer.ps1
 ```
 
-Pushing a tag such as `v1.2.3` builds it on GitHub and attaches it to a draft release.
+A build for release needs `Updates:PublicKey` set in `appsettings.json`. Create the key once, on the machine you release from, and keep a copy of the key file and its passphrase somewhere safe. Without them, installed copies can never update by themselves again:
+
+```powershell
+dotnet run installer/release-key.cs -- new
+```
+
+Pushing a tag such as `v1.2.3` builds the installer on GitHub and attaches it to a draft release. Read the draft over, then sign and publish it from that machine:
+
+```powershell
+./installer/sign-release.ps1 -Tag v1.2.3
+gh release edit v1.2.3 --draft=false
+```
 
 ## License
 

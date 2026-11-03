@@ -39,9 +39,13 @@ internal static class ReleaseFixture
     public const string Latest = "https://api.test/repos/o/r/releases/latest";
     public const string SetupUrl = "https://files.test/setup.exe";
     public const string ChecksumUrl = "https://files.test/setup.exe.sha256";
+    public const string SignatureUrl = "https://files.test/setup.exe.sha256.sig";
 
-    public static GitHubUpdateClient Client(FakeReleases server) =>
-        new(new HttpClient(server), Opt(new UpdatesOptions { ApiUrl = "https://api.test/", Repository = "o/r" }));
+    public static readonly ECDsa Key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+    public static readonly string PublicKey = Convert.ToBase64String(Key.ExportSubjectPublicKeyInfo());
+
+    public static GitHubUpdateClient Client(FakeReleases server, string? publicKey = null) =>
+        new(new HttpClient(server), Opt(new UpdatesOptions { ApiUrl = "https://api.test/", Repository = "o/r", PublicKey = publicKey ?? PublicKey }));
 
     public static string Json(string tag, string setupUrl = SetupUrl, string checksumUrl = ChecksumUrl)
     {
@@ -49,11 +53,22 @@ internal static class ReleaseFixture
         return $$"""
             {"tag_name":"{{tag}}","assets":[
               {"name":"ScreenSorter-{{version}}-setup.exe","browser_download_url":"{{setupUrl}}"},
-              {"name":"ScreenSorter-{{version}}-setup.exe.sha256","browser_download_url":"{{checksumUrl}}"}]}
+              {"name":"ScreenSorter-{{version}}-setup.exe.sha256","browser_download_url":"{{checksumUrl}}"},
+              {"name":"ScreenSorter-{{version}}-setup.exe.sha256.sig","browser_download_url":"{{SignatureUrl}}"}]}
             """;
     }
 
     public static string Sha256(string content) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
+
+    public static string Sign(string text, ECDsa? key = null) =>
+        Convert.ToBase64String((key ?? Key).SignData(Encoding.UTF8.GetBytes(text), HashAlgorithmName.SHA256));
+
+    /// <summary>Publishes a checksum file and its valid signature.</summary>
+    public static void AddChecksum(this FakeReleases server, string checksum)
+    {
+        server.Add(ChecksumUrl, checksum);
+        server.Add(SignatureUrl, Sign(checksum));
+    }
 }
 
 public sealed class GitHubUpdateClientTests : IDisposable
@@ -63,7 +78,7 @@ public sealed class GitHubUpdateClientTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private static UpdateRelease Release() => new(new Version(9, 9, 9), "setup.exe", ReleaseFixture.SetupUrl, ReleaseFixture.ChecksumUrl);
+    private static UpdateRelease Release() => new(new Version(9, 9, 9), "setup.exe", ReleaseFixture.SetupUrl, ReleaseFixture.ChecksumUrl, ReleaseFixture.SignatureUrl);
 
     [Fact]
     public async Task Latest_ReadsTheVersionAndAssets_AndIdentifiesItself()
@@ -72,7 +87,7 @@ public sealed class GitHubUpdateClientTests : IDisposable
 
         var release = await ReleaseFixture.Client(_server).GetLatestAsync(CancellationToken.None);
 
-        Assert.Equal(new UpdateRelease(new Version(1, 2, 3), "ScreenSorter-1.2.3-setup.exe", ReleaseFixture.SetupUrl, ReleaseFixture.ChecksumUrl), release);
+        Assert.Equal(new UpdateRelease(new Version(1, 2, 3), "ScreenSorter-1.2.3-setup.exe", ReleaseFixture.SetupUrl, ReleaseFixture.ChecksumUrl, ReleaseFixture.SignatureUrl), release);
         Assert.StartsWith("ScreenSorter", _server.UserAgent);
     }
 
@@ -108,6 +123,94 @@ public sealed class GitHubUpdateClientTests : IDisposable
         Assert.Null(await ReleaseFixture.Client(_server).GetLatestAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ReleaseWithoutTheSignature_IsAFailure()
+    {
+        _server.Add(ReleaseFixture.Latest, """
+            {"tag_name":"v1.2.3","assets":[
+              {"name":"ScreenSorter-1.2.3-setup.exe","browser_download_url":"https://files.test/setup.exe"},
+              {"name":"ScreenSorter-1.2.3-setup.exe.sha256","browser_download_url":"https://files.test/setup.exe.sha256"}]}
+            """);
+
+        var failure = await Assert.ThrowsAsync<UpdateFailedException>(() => ReleaseFixture.Client(_server).GetLatestAsync(CancellationToken.None));
+
+        Assert.Contains("not signed", failure.Message);
+    }
+
+    private async Task AssertRefused(GitHubUpdateClient client, string expected)
+    {
+        var folder = Path.Combine(_temp.Path, "updates");
+
+        var failure = await Assert.ThrowsAsync<UpdateFailedException>(() => client.DownloadAsync(Release(), folder, CancellationToken.None));
+
+        Assert.Contains(expected, failure.Message);
+        Assert.DoesNotContain(ReleaseFixture.SetupUrl, _server.Requested);
+        Assert.Empty(Directory.GetFiles(folder));
+    }
+
+    [Fact]
+    public async Task Download_SignedWithAnotherKey_IsRefused()
+    {
+        using var attacker = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var checksum = $"{ReleaseFixture.Sha256("evil")}  setup.exe";
+        _server.Add(ReleaseFixture.SetupUrl, "evil");
+        _server.Add(ReleaseFixture.ChecksumUrl, checksum);
+        _server.Add(ReleaseFixture.SignatureUrl, ReleaseFixture.Sign(checksum, attacker));
+
+        await AssertRefused(ReleaseFixture.Client(_server), "signature");
+    }
+
+    [Fact]
+    public async Task Download_ChecksumChangedAfterSigning_IsRefused()
+    {
+        _server.Add(ReleaseFixture.SetupUrl, "evil");
+        _server.Add(ReleaseFixture.SignatureUrl, ReleaseFixture.Sign($"{ReleaseFixture.Sha256("installer")}  setup.exe"));
+        _server.Add(ReleaseFixture.ChecksumUrl, $"{ReleaseFixture.Sha256("evil")}  setup.exe");
+
+        await AssertRefused(ReleaseFixture.Client(_server), "signature");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not base64 !!")]
+    [InlineData("AAAA")]
+    public async Task Download_UnreadableSignature_IsRefused(string signature)
+    {
+        _server.Add(ReleaseFixture.SetupUrl, "installer");
+        _server.Add(ReleaseFixture.ChecksumUrl, $"{ReleaseFixture.Sha256("installer")}  setup.exe");
+        _server.Add(ReleaseFixture.SignatureUrl, signature);
+
+        await AssertRefused(ReleaseFixture.Client(_server), "signature");
+    }
+
+    [Fact]
+    public async Task Download_OldSignedInstallerUnderANewVersion_IsRefused()
+    {
+        _server.Add(ReleaseFixture.SetupUrl, "old installer");
+        _server.AddChecksum($"{ReleaseFixture.Sha256("old installer")}  ScreenSorter-0.1.0-setup.exe");
+
+        await AssertRefused(ReleaseFixture.Client(_server), "ScreenSorter-0.1.0-setup.exe");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Download_NoKeyConfigured_RefusesWithoutAsking(string key)
+    {
+        await AssertRefused(ReleaseFixture.Client(_server, key), "no key");
+
+        Assert.Empty(_server.Requested);
+    }
+
+    [Fact]
+    public async Task Download_UnreadableKeyConfigured_IsRefused()
+    {
+        _server.Add(ReleaseFixture.SetupUrl, "installer");
+        _server.AddChecksum($"{ReleaseFixture.Sha256("installer")}  setup.exe");
+
+        await AssertRefused(ReleaseFixture.Client(_server, "not a key"), "signature");
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Forbidden, "")]
     [InlineData(HttpStatusCode.OK, "not json")]
@@ -122,7 +225,7 @@ public sealed class GitHubUpdateClientTests : IDisposable
     public async Task Download_MatchingFile_IsKept()
     {
         _server.Add(ReleaseFixture.SetupUrl, "installer");
-        _server.Add(ReleaseFixture.ChecksumUrl, $"{ReleaseFixture.Sha256("installer").ToUpperInvariant()}  setup.exe\r\n");
+        _server.AddChecksum($"{ReleaseFixture.Sha256("installer").ToUpperInvariant()}  setup.exe\r\n");
 
         var path = await ReleaseFixture.Client(_server).DownloadAsync(Release(), Path.Combine(_temp.Path, "updates"), CancellationToken.None);
 
@@ -134,7 +237,7 @@ public sealed class GitHubUpdateClientTests : IDisposable
     public async Task Download_WrongFile_LeavesNothingBehind()
     {
         _server.Add(ReleaseFixture.SetupUrl, "tampered");
-        _server.Add(ReleaseFixture.ChecksumUrl, $"{ReleaseFixture.Sha256("installer")}  setup.exe");
+        _server.AddChecksum($"{ReleaseFixture.Sha256("installer")}  setup.exe");
         var folder = Path.Combine(_temp.Path, "updates");
 
         await Assert.ThrowsAsync<UpdateFailedException>(() => ReleaseFixture.Client(_server).DownloadAsync(Release(), folder, CancellationToken.None));
@@ -148,7 +251,7 @@ public sealed class GitHubUpdateClientTests : IDisposable
     public async Task Download_UnreadableChecksum_IsNotInstalled(string checksum)
     {
         _server.Add(ReleaseFixture.SetupUrl, "installer");
-        _server.Add(ReleaseFixture.ChecksumUrl, checksum);
+        _server.AddChecksum(checksum);
 
         await Assert.ThrowsAsync<UpdateFailedException>(() => ReleaseFixture.Client(_server).DownloadAsync(Release(), Path.Combine(_temp.Path, "updates"), CancellationToken.None));
     }
@@ -157,21 +260,21 @@ public sealed class GitHubUpdateClientTests : IDisposable
     public async Task Download_FileAlreadyThere_IsNotFetchedAgain()
     {
         _server.Add(ReleaseFixture.SetupUrl, "installer");
-        _server.Add(ReleaseFixture.ChecksumUrl, $"{ReleaseFixture.Sha256("installer")}  setup.exe");
+        _server.AddChecksum($"{ReleaseFixture.Sha256("installer")}  setup.exe");
         var folder = Path.Combine(_temp.Path, "updates");
         await ReleaseFixture.Client(_server).DownloadAsync(Release(), folder, CancellationToken.None);
         _server.Requested.Clear();
 
         await ReleaseFixture.Client(_server).DownloadAsync(Release(), folder, CancellationToken.None);
 
-        Assert.Equal([ReleaseFixture.ChecksumUrl], _server.Requested);
+        Assert.Equal([ReleaseFixture.ChecksumUrl, ReleaseFixture.SignatureUrl], _server.Requested);
     }
 
     [Fact]
     public async Task Download_DamagedFileAlreadyThere_IsReplaced()
     {
         _server.Add(ReleaseFixture.SetupUrl, "installer");
-        _server.Add(ReleaseFixture.ChecksumUrl, $"{ReleaseFixture.Sha256("installer")}  setup.exe");
+        _server.AddChecksum($"{ReleaseFixture.Sha256("installer")}  setup.exe");
         var folder = Path.Combine(_temp.Path, "updates");
         Directory.CreateDirectory(folder);
         File.WriteAllText(Path.Combine(folder, "setup.exe"), "half a download");
@@ -203,7 +306,7 @@ public sealed class UpdateServiceTests : IDisposable
     {
         _server.Add(ReleaseFixture.Latest, ReleaseFixture.Json("v" + version));
         _server.Add(ReleaseFixture.SetupUrl, "installer");
-        _server.Add(ReleaseFixture.ChecksumUrl, $"{ReleaseFixture.Sha256("installer")}  setup.exe");
+        _server.AddChecksum($"{ReleaseFixture.Sha256("installer")}  ScreenSorter-{version}-setup.exe");
     }
 
     private void MarkInstalled() => File.WriteAllText(Path.Combine(_temp.Path, "unins000.exe"), "");
