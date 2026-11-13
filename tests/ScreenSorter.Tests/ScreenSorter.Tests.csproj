@@ -10,10 +10,19 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <!-- Kestrel for the fake LM Studio in the end-to-end tests; part of the SDK, no package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- The end-to-end tests run on the app's real settings, rule table included. -->
+  <ItemGroup>
+    <Content Include="..\..\src\ScreenSorter.App\appsettings.json" Link="EndToEnd\appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
