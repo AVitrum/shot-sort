@@ -169,3 +169,5 @@ gh release edit v1.2.3 --draft=false
 ## License
 
 [MIT](LICENSE). Third-party components are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+To report a security problem, see [SECURITY.md](SECURITY.md).
