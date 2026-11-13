@@ -119,6 +119,18 @@ public sealed class VisionWorker(
                 startTried = false;
                 continue;
             }
+            catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
+            {
+                // An unhandled exception would stop the host and with it every service. Not MarkCompleted: the file
+                // stays known to intake, so it is not queued again until the app restarts.
+                logger.LogError(ex, "Unexpected error on {Path}; it stays where it is until the app restarts", item.Path);
+                if (queue.Count == 0)
+                {
+                    inBatch = false;
+                    await vision.ReleaseModelAsync(ct);
+                }
+                continue;
+            }
 
             startTried = false;
             queue.MarkCompleted(item);

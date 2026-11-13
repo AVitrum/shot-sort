@@ -139,7 +139,18 @@ public sealed class IntakeService(
             while (_queue.Reader.TryRead(out var path))
             {
                 await activity.WaitWhilePausedAsync(ct);
-                var outcome = await pipeline.ProcessAsync(path, ct);
+                SortOutcome outcome;
+                try
+                {
+                    outcome = await pipeline.ProcessAsync(path, ct);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
+                {
+                    // An unhandled exception would stop the host and with it every service. The file stays known,
+                    // so rescans leave it alone until the app restarts instead of failing on it every minute.
+                    logger.LogError(ex, "Unexpected error on {Path}; it stays where it is until the app restarts", path);
+                    continue;
+                }
                 switch (outcome.Kind)
                 {
                     case SortOutcomeKind.Sorted: sorted++; break;

@@ -40,6 +40,9 @@ internal sealed class AppHarness : IAsyncDisposable
     /// <summary>Resolves a service from the running app.</summary>
     public T Get<T>() where T : notnull => _host.Services.GetRequiredService<T>();
 
+    /// <summary>Whether the host has begun stopping on its own, as it does when a background service throws.</summary>
+    public bool HostStopping => Get<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested;
+
     /// <summary>Everything the app logged so far, plus focus and file times, for failure messages.</summary>
     public string Log =>
         $"focus tracking since {Get<FocusHistory>().TrackingSince:HH:mm:ss.fffffff}, last focus {_lastFocus:HH:mm:ss.fffffff}; files: " +
@@ -53,7 +56,16 @@ internal sealed class AppHarness : IAsyncDisposable
     /// <param name="root">Folder that holds <c>shots</c> and <c>data</c>.</param>
     /// <param name="lmStudio">The fake model server.</param>
     /// <param name="extra">More configuration overrides, as <c>Section:Key</c> pairs.</param>
-    public static async Task<AppHarness> StartAsync(string root, FakeLmStudio lmStudio, params (string Key, string Value)[] extra)
+    public static Task<AppHarness> StartAsync(string root, FakeLmStudio lmStudio, params (string Key, string Value)[] extra) =>
+        StartAsync(root, lmStudio, _ => { }, extra);
+
+    /// <summary>As <see cref="StartAsync(string, FakeLmStudio, (string Key, string Value)[])"/>, with services replaced after the app's own.</summary>
+    /// <param name="root">Folder that holds <c>shots</c> and <c>data</c>.</param>
+    /// <param name="lmStudio">The fake model server.</param>
+    /// <param name="replace">Registers replacements; the last registration of a service wins.</param>
+    /// <param name="extra">More configuration overrides, as <c>Section:Key</c> pairs.</param>
+    public static async Task<AppHarness> StartAsync(string root, FakeLmStudio lmStudio, Action<IServiceCollection> replace,
+        params (string Key, string Value)[] extra)
     {
         var shots = Path.Combine(root, "shots");
         var data = Path.Combine(root, "data");
@@ -101,6 +113,7 @@ internal sealed class AppHarness : IAsyncDisposable
         builder.Services.AddSingleton<ISystemActivity, IdleMachine>();
         builder.Services.AddSingleton<IGameTitleProvider, NoGameTitles>();
         builder.Services.AddSingleton<IGameCatalog>(new FixedCatalog("Test Game"));
+        replace(builder.Services);
 
         var host = builder.Build();
         await host.StartAsync();
