@@ -1,9 +1,14 @@
 # The end-to-end scripts in tests/e2e: the real app process driven through UI Automation, and real installers.
-# Slower than the unit and in-process tests, so on demand and weekly instead of on every push.
+# Slower than the unit and in-process tests, so on demand, weekly and when they change, instead of on every push.
 name: End-to-end
 
 on:
   workflow_dispatch:
+  # Also when the scripts or this workflow change, so a broken script shows up in its own PR.
+  pull_request:
+    paths:
+      - 'tests/e2e/**'
+      - '.github/workflows/e2e.yml'
   schedule:
     - cron: '41 4 * * 1'
 
