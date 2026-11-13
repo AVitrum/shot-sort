@@ -8,9 +8,10 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Options;
 using Microsoft.Win32;
 using ScreenSorter.Core.Configuration;
-using ScreenSorter.Core.Models;
 using ScreenSorter.Core.Sorting;
 using ScreenSorter.Infrastructure.Status;
+// The window has a list box named HistoryFilter, which hides the type of the same name.
+using HistoryKind = ScreenSorter.Core.Sorting.HistoryFilter;
 
 namespace ScreenSorter.App;
 
@@ -105,27 +106,12 @@ public partial class ActivityWindow : Window
         var selected = (HistoryGrid.SelectedItem as HistoryItem)?.Decisions.Latest.FileHash;
         _items = await Task.Run(() => _history.ListAsync(HistoryLimit, CancellationToken.None));
         ApplyHistoryFilter();
-        if (selected is not null)
-            HistoryGrid.SelectedItem = HistoryGrid.Items.OfType<HistoryItem>().FirstOrDefault(i => i.Decisions.Latest.FileHash == selected);
+        if (HistoryView.FindSameFile(HistoryGrid.Items.OfType<HistoryItem>(), selected) is { } same)
+            HistoryGrid.SelectedItem = same;
     }
 
-    private void ApplyHistoryFilter()
-    {
-        var search = HistorySearch.Text.Trim();
-        var filter = HistoryFilter.SelectedIndex;
-        HistoryGrid.ItemsSource = _items.Where(item => MatchesFilter(item, filter)
-            && (search.Length == 0
-                || item.FileName.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || item.Folder.Contains(search, StringComparison.OrdinalIgnoreCase))).ToList();
-    }
-
-    private bool MatchesFilter(HistoryItem item, int filter) => filter switch
-    {
-        1 => item.FileExists && string.Equals(item.Decisions.Latest.Classification.Category, _reviewFolder, StringComparison.OrdinalIgnoreCase),
-        2 => item.Stage is not (DecisionStage.UserCorrection or DecisionStage.Undone),
-        3 => item.Stage is DecisionStage.UserCorrection or DecisionStage.Undone,
-        _ => true,
-    };
+    private void ApplyHistoryFilter() =>
+        HistoryGrid.ItemsSource = HistoryView.Filter(_items, (HistoryKind)HistoryFilter.SelectedIndex, HistorySearch.Text, _reviewFolder);
 
     private async void OnRefreshHistory(object sender, RoutedEventArgs e) => await LoadHistoryAsync();
 
@@ -200,14 +186,7 @@ public partial class ActivityWindow : Window
             return;
         var result = await _history.UndoAsync(item, CancellationToken.None);
         await LoadHistoryAsync();
-        HistoryMessage.Text = result switch
-        {
-            HistoryChange.Done => "Moved back. The app leaves it alone until you move it yourself.",
-            HistoryChange.Missing => "The file is no longer in this folder.",
-            HistoryChange.Changed => "A different file has this name now, so it was left alone.",
-            HistoryChange.NotAllowed => "This one cannot be undone.",
-            _ => "It could not be moved. It may be open in another app.",
-        };
+        HistoryMessage.Text = HistoryView.UndoMessage(result);
     }
 
     private async void OnMoveTo(object sender, RoutedEventArgs e)
@@ -219,17 +198,11 @@ public partial class ActivityWindow : Window
             return;
 
         var result = _history.MoveTo(item, dialog.FolderName);
-        HistoryMessage.Text = result switch
-        {
-            HistoryChange.Done => "Moved. The app is learning from it, the same as when you drag a file.",
-            HistoryChange.NotAllowed => "Choose a folder inside the sorted folders, not the top level or a folder elsewhere.",
-            HistoryChange.Missing => "The file is no longer in this folder.",
-            _ => "It could not be moved. It may be open in another app.",
-        };
+        var message = HistoryView.MoveMessage(result);
+        HistoryMessage.Text = message;
         if (result != HistoryChange.Done)
             return;
 
-        var message = HistoryMessage.Text;
         await LoadHistoryAsync();
         HistoryMessage.Text = message;
         // The log changes only when the watcher has learned from the move.
@@ -252,27 +225,8 @@ public partial class ActivityWindow : Window
     {
         var facts = await Task.Run(() => _log.ListFactsAsync(CancellationToken.None));
         var report = AccuracyReport.Build(facts, _reviewFolder);
-        AccuracyGrid.ItemsSource = report.Stages.Select(s => new
-        {
-            Stage = StageName(s.Stage),
-            Placed = s.Sorted,
-            Moved = s.Changed,
-            Kept = s.KeptShare is { } kept ? $"{kept:P0}" : "-",
-            s.Review,
-        }).ToList();
+        AccuracyGrid.ItemsSource = AccuracyView.Rows(report);
         CorrectionsGrid.ItemsSource = report.Corrections;
-        ReviewedText.Text = report.ReviewedByUser == 1
-            ? "You placed 1 screenshot from the review folder."
-            : $"You placed {report.ReviewedByUser} screenshots from the review folder.";
+        ReviewedText.Text = AccuracyView.ReviewedSentence(report.ReviewedByUser);
     }
-
-    private static string StageName(DecisionStage stage) => stage switch
-    {
-        DecisionStage.Rule => "App rules",
-        DecisionStage.Example => "Your examples",
-        DecisionStage.Vision => "Vision model",
-        DecisionStage.Burst => "Copied from a similar shot",
-        DecisionStage.ImageCheck => "Blank image check",
-        _ => stage.ToString(),
-    };
 }
