@@ -22,7 +22,12 @@ public static class SortedPathBuilder
     /// Existing folder names under the category. A sub-folder that matches one of them ignoring case,
     /// spaces and punctuation reuses that spelling, so <c>ELDEN RING</c> lands in <c>Elden Ring</c>.
     /// </param>
-    /// <returns>The full target path.</returns>
+    /// <returns>
+    /// The full target path, always inside a folder under <paramref name="root"/>. Should the parts ever resolve
+    /// elsewhere (outside the root, or into the root itself, where intake would sort the file again), the file goes to
+    /// <c>&lt;Root&gt;/Unknown</c> instead. The category and sub-folder may come from the vision model, which reads text
+    /// in the screenshot, so they are treated as untrusted.
+    /// </returns>
     public static string Build(string root, Classification classification, DateTime captureLocal,
         string extension, IEnumerable<string> existingSubfolders)
     {
@@ -37,7 +42,27 @@ public static class SortedPathBuilder
         }
 
         var name = Sanitize(string.IsNullOrWhiteSpace(classification.Name) ? sub ?? classification.Category : classification.Name);
-        return Path.Combine(folder, FileName(name, captureLocal, extension));
+        var target = Path.Combine(folder, FileName(name, captureLocal, extension));
+        return IsInCategoryFolder(root, target)
+            ? target
+            : Path.Combine(root, "Unknown", FileName(name, captureLocal, extension));
+    }
+
+    /// <summary>Whether <paramref name="path"/> is a file at least one folder below <paramref name="root"/>.</summary>
+    /// <param name="root">Sorted root folder.</param>
+    /// <param name="path">A target path.</param>
+    /// <returns>
+    /// <see langword="true"/> when the path resolves under the root, at least one folder deep, with no segment that
+    /// Windows would silently change (trailing dot or space, <c>.</c> or <c>..</c>).
+    /// </returns>
+    public static bool IsInCategoryFolder(string root, string path)
+    {
+        var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(path);
+        if (!full.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            return false;
+        var segments = full[fullRoot.Length..].Split(Path.DirectorySeparatorChar);
+        return segments.Length >= 2 && segments.All(s => s.Length > 0 && !s.EndsWith('.') && !s.EndsWith(' '));
     }
 
     /// <summary>Builds the file name <c>&lt;Name&gt;_yyyy-MM-dd_HH-mm-ss.ext</c>.</summary>
@@ -58,19 +83,24 @@ public static class SortedPathBuilder
 
     /// <summary>Makes a string safe as a single Windows path segment.</summary>
     /// <param name="value">Raw name, e.g. a window or game title.</param>
-    /// <returns>A non-empty name without invalid characters, trailing dots or reserved device names.</returns>
+    /// <returns>
+    /// A non-empty name without invalid characters, trailing dots or spaces, invisible formatting characters
+    /// (such as the right-to-left override, which can make <c>gpj.exe</c> display as <c>exe.jpg</c>) or reserved
+    /// device names.
+    /// </returns>
     public static string Sanitize(string value)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var sb = new StringBuilder(value.Length);
         foreach (var c in value)
         {
-            if (c is '™' or '®' or '©')
+            if (c is '™' or '®' or '©' || char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format)
                 continue;
             sb.Append(Array.IndexOf(invalid, c) >= 0 || c is ':' or '*' or '?' or '"' or '<' or '>' or '|' ? ' ' : c);
         }
 
-        var result = string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim().TrimEnd('.');
+        // Windows drops trailing dots and spaces, so ". ." would become "." and name the parent folder.
+        var result = string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim().TrimEnd('.', ' ');
         if (result.Length > 80)
             result = result[..80].TrimEnd(' ', '.');
         if (result.Length == 0)
