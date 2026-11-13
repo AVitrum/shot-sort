@@ -139,7 +139,7 @@ To run a second copy beside the installed app, for example a debug build, give i
 | `tests/e2e` | PowerShell scripts that drive the real app, installer and updater |
 | `tools/ScreenSorter.Probe` | Dev console for trying the model and rules without moving files |
 
-GitHub runs the tests on every push and weekly, CodeQL on every push, the end-to-end scripts weekly, and Dependabot proposes package and action updates weekly.
+GitHub runs the tests and the UI scripts on every push and weekly, CodeQL on every push, the installer scripts weekly, and Dependabot proposes package and action updates weekly.
 
 Enable the safety hooks once per clone. They stop commits and pushes containing secrets, personal data, screenshots or very large files. CI runs the same rules on every push and pull request:
 
