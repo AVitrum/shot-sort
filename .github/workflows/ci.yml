@@ -4,6 +4,9 @@ on:
   push:
     branches: [master]
   pull_request:
+  # Weekly, so a newly published advisory for a dependency fails the build even when nothing was pushed.
+  schedule:
+    - cron: '23 4 * * 1'
 
 permissions:
   contents: read

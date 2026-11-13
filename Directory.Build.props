@@ -5,6 +5,10 @@
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Report known vulnerabilities in indirect packages too; CI turns the warnings into errors. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
     <Version>0.2.0</Version>
     <Product>ScreenSorter</Product>
     <Copyright>Copyright (c) 2026 AVitrum</Copyright>
