@@ -178,6 +178,31 @@ public sealed class SettingsEditModel
         static string Text(double value) => value.ToString(CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Adds a folder to watch unless it is blank or already listed (paths are compared without regard to case).</summary>
+    /// <param name="folder">Full path of the folder.</param>
+    /// <returns>True when the folder was added.</returns>
+    public bool AddWatchFolder(string folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || WatchFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+            return false;
+        WatchFolders.Add(folder);
+        return true;
+    }
+
+    /// <summary>Moves a rule up or down the table; rules are tried in table order.</summary>
+    /// <param name="rule">A row of <see cref="Rules"/>.</param>
+    /// <param name="offset">Negative moves it up, positive down.</param>
+    /// <returns>True when it moved; false when the row is not in the table or would leave it.</returns>
+    public bool MoveRule(RuleRow rule, int offset)
+    {
+        var from = Rules.IndexOf(rule);
+        var to = from + offset;
+        if (from < 0 || offset == 0 || to < 0 || to >= Rules.Count)
+            return false;
+        Rules.Move(from, to);
+        return true;
+    }
+
     /// <summary>Checks the values. Rows left completely empty are ignored.</summary>
     /// <returns>One message per problem; empty when the model can be saved.</returns>
     public IReadOnlyList<string> Validate()

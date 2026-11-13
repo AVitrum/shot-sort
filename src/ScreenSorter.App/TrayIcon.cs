@@ -166,10 +166,7 @@ public sealed class TrayIcon : IDisposable
     {
         _pauseItem.Header = _activity.IsPaused ? "Resume" : "Pause";
         var attention = _status.Latest.FirstOrDefault(c => c.NeedsAttention);
-        _icon.Text = _activity.IsPaused ? "ScreenSorter (paused)"
-            : _activity.IsHeld ? "ScreenSorter (waiting for the guide)"
-            : attention is not null ? $"ScreenSorter ({attention.Name} needs attention)"
-            : "ScreenSorter";
+        _icon.Text = TrayText.Tooltip(_activity.IsPaused, _activity.IsHeld, attention?.Name);
     }
 
     private void OnAttentionNeeded(object? sender, ServiceCheck check) => _dispatcher.BeginInvoke(() =>
@@ -193,10 +190,7 @@ public sealed class TrayIcon : IDisposable
         if (!_showSummaries)
             return;
         _balloonOpensStatus = false;
-        var text = summary.Review > 0
-            ? $"Sorted {summary.Sorted} screenshots, {summary.Review} need review"
-            : $"Sorted {summary.Sorted} screenshots";
-        _icon.ShowBalloonTip(5000, "ScreenSorter", text, Forms.ToolTipIcon.Info);
+        _icon.ShowBalloonTip(5000, "ScreenSorter", TrayText.Summary(summary), Forms.ToolTipIcon.Info);
     });
 
     private static void OpenFolder(string folder)

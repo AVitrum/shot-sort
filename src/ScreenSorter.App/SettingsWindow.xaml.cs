@@ -63,8 +63,8 @@ public partial class SettingsWindow : Window
 
     private void OnAddWatchFolder(object sender, RoutedEventArgs e)
     {
-        if (PickFolder() is { } folder && !_model.WatchFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
-            _model.WatchFolders.Add(folder);
+        if (PickFolder() is { } folder)
+            _model.AddWatchFolder(folder);
     }
 
     private void OnRemoveWatchFolder(object sender, RoutedEventArgs e)
@@ -113,15 +113,8 @@ public partial class SettingsWindow : Window
     private void MoveRule(int offset)
     {
         RulesGrid.CommitEdit(DataGridEditingUnit.Row, exitEditingMode: true);
-        if (RulesGrid.SelectedItem is not RuleRow rule)
-            return;
-        var from = _model.Rules.IndexOf(rule);
-        var to = from + offset;
-        if (from >= 0 && to >= 0 && to < _model.Rules.Count)
-        {
-            _model.Rules.Move(from, to);
+        if (RulesGrid.SelectedItem is RuleRow rule && _model.MoveRule(rule, offset))
             RulesGrid.SelectedItem = rule;
-        }
     }
 
     private string? PickFolder()

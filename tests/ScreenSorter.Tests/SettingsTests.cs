@@ -72,6 +72,38 @@ public class SettingsEditModelTests
     public void Defaults_AreValid() => Assert.Empty(Model().Validate());
 
     [Fact]
+    public void AddWatchFolder_SkipsBlanksAndDuplicatesInAnyCase()
+    {
+        var model = Model();
+        var before = model.WatchFolders.Count;
+
+        Assert.True(model.AddWatchFolder(@"D:\Shots"));
+        Assert.False(model.AddWatchFolder(@"d:\SHOTS"));
+        Assert.False(model.AddWatchFolder("  "));
+
+        Assert.Equal(before + 1, model.WatchFolders.Count);
+        Assert.Equal(@"D:\Shots", model.WatchFolders[^1]);
+    }
+
+    [Fact]
+    public void MoveRule_MovesWithinTheTableOnly()
+    {
+        var model = Model();
+        var first = model.Rules[0];
+        var second = model.Rules[1];
+        var last = model.Rules[^1];
+
+        Assert.False(model.MoveRule(first, -1));
+        Assert.False(model.MoveRule(last, 1));
+        Assert.False(model.MoveRule(new RuleRow(), 1));
+        Assert.True(model.MoveRule(first, 1));
+
+        Assert.Same(second, model.Rules[0]);
+        Assert.Same(first, model.Rules[1]);
+        Assert.Same(last, model.Rules[^1]);
+    }
+
+    [Fact]
     public void VisionEnabled_IsReadAndSaved()
     {
         var model = Model();
