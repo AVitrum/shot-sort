@@ -122,13 +122,24 @@ dotnet build ScreenSorter.slnx -v q -nologo
 dotnet test ScreenSorter.slnx -v q -nologo
 ```
 
+The tests include end-to-end runs of the whole app in-process: the real host and `appsettings.json` on a temp folder, with a local server standing in for LM Studio. Run only those with `--filter Category=EndToEnd`. Scripts that drive the real app's windows, tray menu, installer and updates are in [`tests/e2e`](tests/e2e/README.md). They run beside an installed copy without touching your data:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/e2e/run-all.ps1
+```
+
+To run a second copy beside the installed app, for example a debug build, give it its own instance name and its own paths: `--App:InstanceName=dev`.
+
 | Path | What it is |
 |---|---|
 | `src/ScreenSorter.Core` | Pipeline, rules, examples, models and interfaces |
 | `src/ScreenSorter.Infrastructure` | Win32, file system, SQLite, LM Studio, CLIP |
 | `src/ScreenSorter.App` | WPF tray host and `appsettings.json` |
-| `tests/ScreenSorter.Tests` | xUnit tests; they use temp folders only |
+| `tests/ScreenSorter.Tests` | xUnit tests, in-process end-to-end tests under `EndToEnd`; temp folders only |
+| `tests/e2e` | PowerShell scripts that drive the real app, installer and updater |
 | `tools/ScreenSorter.Probe` | Dev console for trying the model and rules without moving files |
+
+GitHub runs the tests on every push and weekly, CodeQL on every push, the end-to-end scripts weekly, and Dependabot proposes package and action updates weekly.
 
 Enable the safety hooks once per clone. They stop commits and pushes containing secrets, personal data, screenshots or very large files. CI runs the same rules on every push and pull request:
 
