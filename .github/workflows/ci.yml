@@ -39,3 +39,31 @@ jobs:
       - name: Check tracked files
         shell: bash
         run: sh .githooks/check-tree.sh
+
+  # The real app driven through UI Automation (tests/e2e): windows, tray, history, privacy, and a self-contained
+  # build. About 3 minutes, in parallel with the build, so window changes are checked before they merge.
+  ui:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.402
+      - name: Build
+        run: dotnet build ScreenSorter.slnx -nologo
+      - name: Windows, tray and self-contained build
+        shell: powershell
+        env:
+          SCREENSORTER_E2E_ROOT: ${{ runner.temp }}/ScreenSorterE2E
+        run: |
+          & ./tests/e2e/run-all.ps1; $failed = $LASTEXITCODE
+          & powershell -NoProfile -ExecutionPolicy Bypass -File ./tests/e2e/installed-run.ps1; if ($LASTEXITCODE -ne 0) { $failed++ }
+          exit $failed
+      - name: Keep logs and window pictures
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-ui
+          path: ${{ runner.temp }}/ScreenSorterE2E
+          if-no-files-found: ignore
