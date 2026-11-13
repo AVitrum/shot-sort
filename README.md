@@ -104,7 +104,7 @@ The decision log records file paths and the focused app's name, program path and
 
 File paths and the rest of each record stay as long as the log does. They are how the app tells a file it sorted from one you placed yourself, so removing them would teach it from its own guesses. To remove everything, delete `%LOCALAPPDATA%\ScreenSorter`; the app then treats sorted files as placed by you.
 
-The app reads window titles, process paths, and Steam and Epic install data. While classifying, it passes the window title to the local model as a hint. Its only network traffic outside this machine is the one-time model download and, unless you turn it off, a daily request to GitHub for the latest version and the download of a new one. Those requests carry no screenshots, file names or window titles.
+The app reads window titles, process paths, and Steam and Epic install data. While classifying, it passes the window title to the local model as a hint. Screenshots go only to the LM Studio address in Settings, and that address must be this computer unless you turn on **Allow another computer**; another computer must use https. Its only network traffic outside this machine is the one-time model download and, unless you turn it off, a daily request to GitHub for the latest version and the download of a new one. Those requests carry no screenshots, file names or window titles.
 
 ## Current limits
 

@@ -55,7 +55,7 @@ public class SettingsMergerTests
 
 public class SettingsEditModelTests
 {
-    private static SettingsEditModel Model() => SettingsEditModel.From(
+    internal static SettingsEditModel Model() => SettingsEditModel.From(
         new PathsOptions { WatchFolders = [@"%USERPROFILE%\Pictures\Screenshots"], SortedRoot = @"%USERPROFILE%\Pictures\Screenshots", ReviewFolder = "_Review" },
         DefaultRules(),
         new GameCatalogOptions { ExtraTitles = ["Wuthering Waves"] },

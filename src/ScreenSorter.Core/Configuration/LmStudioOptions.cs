@@ -59,6 +59,12 @@ public sealed class LmStudioOptions
     /// <summary>Wait before retrying after LM Studio was unreachable or returned an error.</summary>
     public int RetryMinutes { get; set; } = 5;
 
+    /// <summary>
+    /// Allows <see cref="BaseUrl"/> on another computer. Screenshots are sent to that address, so another computer is
+    /// refused unless this is on, and even then only over https. See <see cref="Vision.LmStudioAddress"/>.
+    /// </summary>
+    public bool AllowRemote { get; set; }
+
     /// <summary>Start LM Studio's server when files need it and the PC is idle, if it is on this machine and <see cref="CliPath"/> exists.</summary>
     public bool AutoStartServer { get; set; } = true;
 

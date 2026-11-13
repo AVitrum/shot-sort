@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ScreenSorter.Core.Configuration;
+using ScreenSorter.Core.Vision;
 using ScreenSorter.Core.Sorting;
 
 namespace ScreenSorter.Core.Settings;
@@ -109,6 +110,9 @@ public sealed class SettingsEditModel
     /// <summary>LM Studio's OpenAI-compatible URL.</summary>
     public string LmStudioUrl { get; set; } = "";
 
+    /// <summary>Whether the LM Studio address may be on another computer (https only); screenshots are sent there.</summary>
+    public bool LmStudioAllowRemote { get; set; }
+
     /// <summary>Vision model name in LM Studio.</summary>
     public string LmStudioModel { get; set; } = "";
 
@@ -153,6 +157,7 @@ public sealed class SettingsEditModel
             SkipWhenFullscreen = idle.SkipWhenFullscreen,
             VisionEnabled = lmStudio.Enabled,
             LmStudioUrl = lmStudio.BaseUrl,
+            LmStudioAllowRemote = lmStudio.AllowRemote,
             LmStudioModel = lmStudio.Model,
             WindowTitleDays = privacy.WindowTitleDays.ToString(CultureInfo.InvariantCulture),
             LogDays = privacy.LogDays.ToString(CultureInfo.InvariantCulture),
@@ -216,8 +221,8 @@ public sealed class SettingsEditModel
         CheckRange(problems, WindowTitleDays, "Days to keep window titles", 0, 3650);
         CheckRange(problems, LogDays, "Days to keep logs", 1, 3650);
 
-        if (!Uri.TryCreate(LmStudioUrl?.Trim(), UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
-            problems.Add("The LM Studio URL must look like http://localhost:1234/v1.");
+        if (LmStudioAddress.Problem(LmStudioUrl, LmStudioAllowRemote) is { } addressProblem)
+            problems.Add(addressProblem);
         if (string.IsNullOrWhiteSpace(LmStudioModel))
             problems.Add("Enter the LM Studio model name.");
 
@@ -277,6 +282,7 @@ public sealed class SettingsEditModel
             {
                 [nameof(LmStudioOptions.Enabled)] = VisionEnabled,
                 [nameof(LmStudioOptions.BaseUrl)] = LmStudioUrl.Trim(),
+                [nameof(LmStudioOptions.AllowRemote)] = LmStudioAllowRemote,
                 // LM Studio serves its own API from the same address, so the user edits one URL.
                 [nameof(LmStudioOptions.ManagementUrl)] = $"{url.Scheme}://{url.Authority}/api/v1",
                 [nameof(LmStudioOptions.Model)] = LmStudioModel.Trim(),
