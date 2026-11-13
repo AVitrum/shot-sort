@@ -33,7 +33,7 @@ $realData = Join-Path $env:LOCALAPPDATA 'ScreenSorter'
 function Real-State {
     $exeTime = if (Test-Path $realExe) { (Get-Item $realExe).LastWriteTimeUtc.Ticks } else { 'none' }
     $newest = (Get-ChildItem $realData -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '*.log' } | Measure-Object LastWriteTimeUtc -Maximum).Maximum
-    "$exeTime|$newest|" + ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').PSObject.Properties.Name -join ',')
+    "$exeTime|$newest|" + (Get-RunKeyNames)
 }
 $realBefore = Real-State
 

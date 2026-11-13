@@ -52,6 +52,13 @@ function New-PatternPng($path, $seed, $noise) {
     $f = [IO.File]::Create($path); $e.Save($f); $f.Close()
 }
 
+# Value names in the user's Run key (start with Windows), or '' when the key does not exist, as on a fresh CI account.
+function Get-RunKeyNames {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    if (-not (Test-Path $key)) { return '' }
+    return (Get-ItemProperty $key).PSObject.Properties.Name -join ','
+}
+
 function New-Sandbox($name) {
     $sandbox = Join-Path $E2ERoot "run\$name"
     if (Test-Path $sandbox) { Remove-Item -Recurse -Force $sandbox -Confirm:$false }

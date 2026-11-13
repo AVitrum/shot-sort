@@ -8,7 +8,7 @@ if (Test-Path $root) { Remove-Item -Recurse -Force $root -Confirm:$false }
 $dir = Join-Path $root 'app'
 New-Item -ItemType Directory -Force $root | Out-Null
 
-$runBefore = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').PSObject.Properties.Name -join ','
+$runBefore = Get-RunKeyNames
 # A real ScreenSorter install owns this key; a smoke install must neither create nor change it.
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6C2F4C57-1B7E-4E0B-9D35-3B4B7E8A2F11}_is1'
 function Get-UninstallEntry { if (Test-Path $uninstallKey) { (Get-ItemProperty $uninstallKey | ConvertTo-Json -Compress) } else { 'none' } }
@@ -38,7 +38,7 @@ Check 'uninstaller present' (Test-Path $uninstaller)
 $u = Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait
 Check 'uninstaller exit code 0' ($u.ExitCode -eq 0)
 Check 'files removed' (Wait-Until { -not (Test-Path $installed) } 20)
-$runAfter = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').PSObject.Properties.Name -join ','
+$runAfter = Get-RunKeyNames
 Check 'Run key unchanged' ($runBefore -eq $runAfter)
 Check 'uninstall registry entry unchanged' ($entryBefore -eq (Get-UninstallEntry))
 Complete

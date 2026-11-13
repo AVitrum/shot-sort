@@ -32,7 +32,7 @@ jobs:
           SCREENSORTER_E2E_ROOT: ${{ runner.temp }}/ScreenSorterE2E
         run: |
           & ./tests/e2e/run-all.ps1; $failed = $LASTEXITCODE
-          & ./tests/e2e/installed-run.ps1; if ($LASTEXITCODE -ne 0) { $failed++ }
+          & powershell -NoProfile -ExecutionPolicy Bypass -File ./tests/e2e/installed-run.ps1; if ($LASTEXITCODE -ne 0) { $failed++ }
           exit $failed
       - name: Keep logs and window pictures
         if: failure()
@@ -64,12 +64,17 @@ jobs:
         env:
           SCREENSORTER_E2E_ROOT: ${{ runner.temp }}/ScreenSorterE2E
         run: |
+          # Each script in its own process, so one that throws does not skip the others.
+          function Run($script, [string[]]$params) {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File "./tests/e2e/$script" @params
+            if ($LASTEXITCODE -ne 0) { $script:failed++ }
+          }
           $failed = 0
-          & ./tests/e2e/install.ps1 -Setup $env:OLD_SETUP; if ($LASTEXITCODE -ne 0) { $failed++ }
-          & ./tests/e2e/uninstall-ask.ps1 -Setup $env:OLD_SETUP; if ($LASTEXITCODE -ne 0) { $failed++ }
+          Run 'install.ps1' @('-Setup', $env:OLD_SETUP)
+          Run 'uninstall-ask.ps1' @('-Setup', $env:OLD_SETUP)
           # No real ScreenSorter on a runner: anything still running is a smoke copy, and the update needs none.
           Get-Process ScreenSorter.App -ErrorAction SilentlyContinue | Stop-Process -Force
-          & ./tests/e2e/update.ps1 -OldSetup $env:OLD_SETUP -NewSetup $env:NEW_SETUP; if ($LASTEXITCODE -ne 0) { $failed++ }
+          Run 'update.ps1' @('-OldSetup', $env:OLD_SETUP, '-NewSetup', $env:NEW_SETUP)
           exit $failed
       - name: Keep logs
         if: failure()
