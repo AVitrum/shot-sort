@@ -13,6 +13,13 @@ updates:
     groups:
       nuget-minor-and-patch:
         update-types: [minor, patch]
+    # The app runs on .NET 10 (LTS). Packages released with the runtime stay on its 10.0.x servicing line, which
+    # carries the security fixes; a new major comes with a deliberate move of the whole app to a newer runtime.
+    ignore:
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Data.Sqlite*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
