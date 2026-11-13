@@ -24,7 +24,13 @@ jobs:
       - name: Build the release signing tool
         run: dotnet build installer/release-key.cs
       - name: Test
-        run: dotnet test ScreenSorter.slnx -c Release --no-build -nologo
+        run: dotnet test ScreenSorter.slnx -c Release --no-build -nologo --collect "XPlat Code Coverage" --settings tests/coverage.runsettings --results-directory TestResults
+      # Report only: coverage never fails the build.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: pwsh
+        run: ./.github/scripts/coverage-summary.ps1 -Path TestResults -Out $env:GITHUB_STEP_SUMMARY
 
   safety-rules:
     runs-on: windows-2025
