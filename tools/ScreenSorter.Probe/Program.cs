@@ -7,6 +7,8 @@
 // at a range of thresholds, to tune Thresholds:ExampleSimilarity and ExampleAgreement. Reads only.
 // --Probe:Mode=burst: for a sorted root, replays each screenshot the user confirmed in capture order and counts how often
 // copying the folder of a near-identical earlier shot would be right, to tune the Burst settings. Reads only.
+// --Probe:Mode=accuracy: reruns the vision model on screenshots whose folder the user confirmed and scores category and
+//   name. Options: Probe:Categories (Games,Chat), Probe:Limit (60), Probe:Hint (true), Probe:Out (CSV). Reads only.
 // --Probe:Mode=gpu: prints the GPU load from NVML and from the Windows counters, to compare them. Reads only.
 // --Probe:Mode=rule --Probe:Exe=<path>: prints what the rules do for a focused exe, with the real config and catalog.
 // --Probe:Mode=rename-sorted: one-time cleanup for a sorted root (the folder argument). Lists generated names in
@@ -66,6 +68,8 @@ if (string.Equals(builder.Configuration["Probe:Mode"], "evaluate", StringCompari
     return await EvaluateAsync();
 if (string.Equals(builder.Configuration["Probe:Mode"], "burst", StringComparison.OrdinalIgnoreCase))
     return await EvaluateBurstsAsync();
+if (string.Equals(builder.Configuration["Probe:Mode"], "accuracy", StringComparison.OrdinalIgnoreCase))
+    return await VisionAccuracyAsync();
 if (string.Equals(builder.Configuration["Probe:Mode"], "gpu", StringComparison.OrdinalIgnoreCase))
 {
     var activity = host.Services.GetRequiredService<ScreenSorter.Core.Idle.ISystemActivity>();
@@ -302,6 +306,85 @@ async Task<int> ClassifyAsync()
     }
     await vision.ReleaseModelAsync(CancellationToken.None);
     Console.WriteLine($"{count} file(s) in {total.Elapsed.TotalSeconds:0.0} s");
+    return 0;
+}
+
+// Reruns the vision model on screenshots whose right folder is known and scores category and name separately.
+// Truth: files the user placed (latest decision a correction) and files the model placed that the user kept, both
+// still where the log says. The model gets the focus hint it had at the first decision. Reads only.
+async Task<int> VisionAccuracyAsync()
+{
+    var root = Path.GetFullPath(args[0]);
+    var config = builder.Configuration;
+    var categories = (config["Probe:Categories"] ?? "Games,Chat").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var limit = config.GetValue("Probe:Limit", 60);
+    var useHint = config.GetValue("Probe:Hint", true);
+    var review = config[$"{PathsOptions.Section}:{nameof(PathsOptions.ReviewFolder)}"] ?? "_Review";
+
+    var log = host.Services.GetRequiredService<IDecisionLog>();
+    var vision = host.Services.GetRequiredService<IVisionClassifier>();
+    var mapper = host.Services.GetRequiredService<VisionMapper>();
+
+    var known = new List<(string File, string Category, string? Sub, string Source, ScreenSorter.Core.Models.FocusSnapshot? Hint)>();
+    foreach (var decisions in await log.ListFilesAsync(100_000, CancellationToken.None))
+    {
+        var stage = decisions.Latest.Classification.Stage;
+        var source = stage == ScreenSorter.Core.Models.DecisionStage.UserCorrection ? "user"
+            : stage == ScreenSorter.Core.Models.DecisionStage.Vision ? "kept" : null;
+        var path = decisions.Latest.NewPath;
+        if (source is null || !File.Exists(path) || CorrectionProcessor.LabelOf(root, path) is not { } label
+            || string.Equals(label.Category, review, StringComparison.OrdinalIgnoreCase)
+            || !categories.Contains(label.Category, StringComparer.OrdinalIgnoreCase))
+            continue;
+        known.Add((path, label.Category, label.SubFolder, source, decisions.First.Focus));
+    }
+
+    // Round-robin over folders, so a few large folders do not decide the score.
+    var sample = known.GroupBy(k => $"{k.Category}/{k.Sub}", StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key)
+        .SelectMany(g => g.OrderBy(k => k.File).Select((k, i) => (k, i)))
+        .OrderBy(x => x.i).ThenBy(x => x.k.File).Select(x => x.k).Take(limit).ToList();
+    Console.WriteLine($"Known: {known.Count} ({known.Count(k => k.Source == "user")} placed by the user); sample {sample.Count} from " +
+                      $"{sample.Select(s => $"{s.Category}/{s.Sub}").Distinct().Count()} folders; hint {(useHint ? "on" : "off")}");
+    Console.WriteLine($"Settings: MaxImageSide={config["LmStudio:MaxImageSide"]} MaxTokens={config["LmStudio:MaxTokens"]} Model={config["LmStudio:Model"]}");
+
+    var rows = new List<(string Source, string Verdict)>();
+    var csv = new List<string> { "file,source,truth,predicted,verdict,ms" };
+    var total = Stopwatch.StartNew();
+    foreach (var s in sample)
+    {
+        var sw = Stopwatch.StartNew();
+        ScreenSorter.Core.Vision.VisionResult? result;
+        try
+        {
+            result = await vision.ClassifyAsync(s.File, useHint ? s.Hint : null, CancellationToken.None);
+        }
+        catch (VisionUnavailableException ex)
+        {
+            Console.WriteLine($"UNAVAILABLE: {ex.Message}");
+            return 1;
+        }
+        var c = mapper.Map(result);
+        var truth = $"{s.Category}/{s.Sub}";
+        var predicted = $"{c.Category}/{c.SubFolder}";
+        var verdict = string.Equals(c.Category, review, StringComparison.OrdinalIgnoreCase) ? "review"
+            : !string.Equals(c.Category, s.Category, StringComparison.OrdinalIgnoreCase) ? "wrong-category"
+            : SortedPathBuilder.MatchKey(c.SubFolder ?? "") == SortedPathBuilder.MatchKey(s.Sub ?? "") ? "right"
+            : "wrong-name";
+        rows.Add((s.Source, verdict));
+        csv.Add($"\"{Path.GetFileName(s.File)}\",{s.Source},\"{truth}\",\"{predicted}\",{verdict},{sw.ElapsedMilliseconds}");
+        Console.WriteLine($"{verdict,-14} {s.Source} {truth} => {predicted} (game='{result?.GameTitle}' app='{result?.AppName}') {sw.ElapsedMilliseconds} ms");
+    }
+    await vision.ReleaseModelAsync(CancellationToken.None);
+
+    foreach (var group in rows.GroupBy(r => r.Source).Append(rows.GroupBy(_ => "all").Single()))
+    {
+        var n = group.Count();
+        string Share(string v) => $"{group.Count(r => r.Verdict == v)} ({(double)group.Count(r => r.Verdict == v) / n:P0})";
+        Console.WriteLine($"{group.Key,-5} n={n,3}  right {Share("right")}  wrong-name {Share("wrong-name")}  wrong-category {Share("wrong-category")}  review {Share("review")}");
+    }
+    Console.WriteLine($"{rows.Count} file(s) in {total.Elapsed.TotalSeconds:0} s");
+    if (config["Probe:Out"] is { Length: > 0 } outFile)
+        await File.WriteAllLinesAsync(outFile, csv);
     return 0;
 }
 
