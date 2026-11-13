@@ -43,6 +43,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
         _args = e.Args;
+        DispatcherUnhandledException += OnWindowError;
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            Log(LogLevel.Critical, args.ExceptionObject as Exception, "Unhandled exception; the app ends");
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log(LogLevel.Warning, args.Exception, "A background task failed and nothing awaited it");
+            args.SetObserved();
+        };
 
         if (!TryBecomeSingleInstance())
         {
@@ -75,6 +83,9 @@ public partial class App : Application
             if (_firstRun)
                 _host.Services.GetRequiredService<SortActivity>().Hold();
             await _host.StartAsync();
+            // Exit stops the host too, but sets _exiting first; any other stop means a service failed.
+            _host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.Register(
+                () => Dispatcher.BeginInvoke(OnServicesStoppedOnTheirOwn));
             _tray = _host.Services.GetRequiredService<TrayIcon>();
             _tray.ExitRequested += async (_, _) => await ExitAsync(restart: false);
             _tray.SettingsRequested += (_, _) => OpenSettings();
@@ -96,6 +107,48 @@ public partial class App : Application
             MessageBox.Show($"ScreenSorter failed to start:\n{ex.Message}", "ScreenSorter",
                 MessageBoxButton.OK, MessageBoxImage.Error);
             await ExitAsync(restart: false);
+        }
+    }
+
+    // Without this the tray icon would stay while nothing behind it sorts. One restart clears a one-off fault; a fault
+    // that comes straight back gets a message instead of a restart loop.
+    private async void OnServicesStoppedOnTheirOwn()
+    {
+        if (_exiting || _host is null)
+            return;
+        Log(LogLevel.Critical, null, "The background services stopped on their own; the error is logged above");
+        var paths = _host.Services.GetRequiredService<IOptions<PathsOptions>>().Value;
+        if (CrashRestartMarker.TryClaim(paths, DateTimeOffset.UtcNow))
+        {
+            await ExitAsync(restart: true);
+            return;
+        }
+
+        MessageBox.Show(
+            "ScreenSorter stopped after an error, and again right after restarting, so it does not restart by itself now.\n\n" +
+            $"Details are in the log in {PathsOptions.Expand(paths.LogFolder)}.\nStart ScreenSorter again from the Start menu.",
+            "ScreenSorter", MessageBoxButton.OK, MessageBoxImage.Error);
+        await ExitAsync(restart: false);
+    }
+
+    // A fault in a window or menu handler is local to it; the sorting services keep running, so the app does too.
+    private void OnWindowError(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    {
+        Log(LogLevel.Error, e.Exception, "Unhandled error in a window or menu");
+        e.Handled = true;
+        MessageBox.Show($"Something went wrong:\n{e.Exception.Message}\n\nScreenSorter keeps running. Details are in the log.",
+            "ScreenSorter", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    // Before the host exists, or after it is disposed, there is no logger; the message boxes still tell the user.
+    private void Log(LogLevel level, Exception? exception, string message)
+    {
+        try
+        {
+            _host?.Services.GetService<ILogger<App>>()?.Log(level, exception, "{Message}", message);
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
