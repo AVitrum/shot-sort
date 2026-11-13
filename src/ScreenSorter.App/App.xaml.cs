@@ -24,7 +24,6 @@ namespace ScreenSorter.App;
 /// </summary>
 public partial class App : Application
 {
-    private const string SingleInstanceMutexName = @"Local\ScreenSorter.SingleInstance";
     // Long enough for an instance that is restarting itself to finish shutting down.
     private static readonly TimeSpan SingleInstanceWait = TimeSpan.FromSeconds(10);
     private readonly RunAtLoginRegistration _runAtLogin = new();
@@ -102,7 +101,7 @@ public partial class App : Application
 
     private bool TryBecomeSingleInstance()
     {
-        var mutex = new Mutex(initiallyOwned: false, SingleInstanceMutexName);
+        var mutex = new Mutex(initiallyOwned: false, SingleInstanceName.FromArgs(_args));
         try
         {
             if (!mutex.WaitOne(SingleInstanceWait))
