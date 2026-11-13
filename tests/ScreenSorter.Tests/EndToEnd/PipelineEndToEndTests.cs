@@ -101,8 +101,11 @@ public sealed class PipelineEndToEndTests : IAsyncLifetime
         app.NewScreenshot("Screenshot 2026-11-13 102000.png");
         Assert.True(await Eventually(() => app.Files() is [var f] && f.StartsWith("Chat/Discord/")), app.Log);
 
+        // The pipeline moves the file first and logs the decision after, so the file can show up before its entry.
         var history = app.Get<DecisionHistory>();
-        var item = Assert.Single(await history.ListAsync(10, CancellationToken.None));
+        IReadOnlyList<HistoryItem> items = [];
+        Assert.True(await Eventually(() => (items = history.ListAsync(10, CancellationToken.None).GetAwaiter().GetResult()).Count == 1), app.Log);
+        var item = items[0];
         Assert.True(item.CanUndo);
         await history.UndoAsync(item, CancellationToken.None);
         Assert.Equal(["Screenshot 2026-11-13 102000.png"], app.Files());
