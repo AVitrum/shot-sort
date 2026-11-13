@@ -1,0 +1,75 @@
+# The end-to-end scripts in tests/e2e: the real app process driven through UI Automation, and real installers.
+# Slower than the unit and in-process tests, so on demand and weekly instead of on every push.
+name: End-to-end
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.402
+      - name: Build
+        run: dotnet build ScreenSorter.slnx -nologo
+      - name: Windows, tray and self-contained build
+        shell: powershell
+        run: |
+          & ./tests/e2e/run-all.ps1; $failed = $LASTEXITCODE
+          & ./tests/e2e/installed-run.ps1; if ($LASTEXITCODE -ne 0) { $failed++ }
+          exit $failed
+      - name: Keep logs and window pictures
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-ui
+          path: ${{ runner.temp }}/ScreenSorterE2E
+          if-no-files-found: ignore
+    env:
+      SCREENSORTER_E2E_ROOT: ${{ runner.temp }}/ScreenSorterE2E
+
+  installer:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.402
+      - name: Build
+        run: dotnet build ScreenSorter.slnx -nologo
+      - name: Build smoke installers 0.0.1 and 0.0.2
+        shell: powershell
+        run: |
+          $old = & ./installer/build-installer.ps1 -Version 0.0.1 -SmokeTest -SmokeMutex | Select-Object -Last 1
+          $new = & ./installer/build-installer.ps1 -Version 0.0.2 -SmokeTest -SmokeMutex | Select-Object -Last 1
+          "OLD_SETUP=$old" | Add-Content $env:GITHUB_ENV
+          "NEW_SETUP=$new" | Add-Content $env:GITHUB_ENV
+      - name: Install, uninstall question, update
+        shell: powershell
+        run: |
+          $failed = 0
+          & ./tests/e2e/install.ps1 -Setup $env:OLD_SETUP; if ($LASTEXITCODE -ne 0) { $failed++ }
+          & ./tests/e2e/uninstall-ask.ps1 -Setup $env:OLD_SETUP; if ($LASTEXITCODE -ne 0) { $failed++ }
+          # No real ScreenSorter on a runner: anything still running is a smoke copy, and the update needs none.
+          Get-Process ScreenSorter.App -ErrorAction SilentlyContinue | Stop-Process -Force
+          & ./tests/e2e/update.ps1 -OldSetup $env:OLD_SETUP -NewSetup $env:NEW_SETUP; if ($LASTEXITCODE -ne 0) { $failed++ }
+          exit $failed
+      - name: Keep logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-installer
+          path: ${{ runner.temp }}/ScreenSorterE2E
+          if-no-files-found: ignore
+    env:
+      SCREENSORTER_E2E_ROOT: ${{ runner.temp }}/ScreenSorterE2E
