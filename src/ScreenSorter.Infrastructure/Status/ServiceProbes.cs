@@ -50,6 +50,9 @@ public sealed class LmStudioProbe(HttpClient http, VisionQueue queue, IVisionSer
 
         var model = options.Value.Model;
         var waiting = queue.Count;
+        if (LmStudioAddress.Problem(options.Value.BaseUrl, options.Value.AllowRemote) is { } problem)
+            return new ServiceCheck(Name, ServiceState.Problem, "Not used: " + problem,
+                "Change the address in Settings under Vision model.", NeedsAttention: waiting > 0);
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);

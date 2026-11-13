@@ -35,6 +35,10 @@ public sealed class LmStudioVisionClient(
     /// <inheritdoc />
     public async Task<VisionResult?> ClassifyAsync(string imagePath, FocusSnapshot? hint, CancellationToken ct)
     {
+        // Settings refuse such an address too; this also covers a settings file edited by hand.
+        if (LmStudioAddress.Problem(_options.BaseUrl, _options.AllowRemote) is { } problem)
+            throw new VisionUnavailableException(problem);
+
         // Asked before this request can load the model; a failure leaves it unknown, so the next request asks again.
         if (_options.EjectAfterBatch && !_ownershipKnown && await TryListInstancesAsync(ct) is { } loaded)
         {
