@@ -14,6 +14,10 @@ Check 'LM Studio fix' ($null -ne (Find-Named $win 'Open LM Studio and start its 
 Check 'Examples row' ($null -ne (Find-Named $win '0 examples learned.'))
 Check 'watch folder ok' ($null -ne (Find-Named $win "$root\shots"))
 Check 'nothing waiting' ($null -ne (Find-Named $win 'Running. Nothing is waiting.'))
+Check 'update check explains a copy that was not installed' ($null -ne (Find-Named $win 'This copy was not installed, so it cannot update itself.'))
+$checkUpdates = Find-Named $win 'Check for updates'
+Check 'Check for updates is off in a copy that was not installed' ($checkUpdates -and -not $checkUpdates.Current.IsEnabled)
+Check 'no install button without a version' ($null -eq (Find-Named $win 'Install and restart'))
 Save-Shot $win 'status-dead.png'
 
 Stop-App

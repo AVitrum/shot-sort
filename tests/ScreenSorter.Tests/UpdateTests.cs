@@ -442,6 +442,125 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckNow_CopyNotInstalled_AsksNothing()
+    {
+        Publish("99.0.0");
+
+        var result = await Service().CheckNowAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateCheckOutcome.NotInstalled, result.Outcome);
+        Assert.Contains("not installed", result.Message);
+        Assert.Empty(_server.Requested);
+    }
+
+    [Fact]
+    public async Task CheckNow_SameVersion_IsUpToDate()
+    {
+        MarkInstalled();
+        Publish(UpdateService.CurrentVersion.ToString(3));
+
+        var result = await Service().CheckNowAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateCheckOutcome.UpToDate, result.Outcome);
+        Assert.Null(result.Version);
+    }
+
+    [Fact]
+    public async Task CheckNow_NothingPublished_IsUpToDate()
+    {
+        MarkInstalled();
+
+        var result = await Service().CheckNowAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateCheckOutcome.UpToDate, result.Outcome);
+    }
+
+    [Fact]
+    public async Task CheckNow_NewerVersion_IsReadyToInstall()
+    {
+        MarkInstalled();
+        Publish("99.0.0");
+        var service = Service();
+
+        var result = await service.CheckNowAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateCheckOutcome.Ready, result.Outcome);
+        Assert.Equal("99.0.0", result.Version);
+        Assert.Contains("99.0.0", result.Message);
+        Assert.True(File.Exists(service.WaitingSetup));
+    }
+
+    [Fact]
+    public async Task CheckNow_AutomaticUpdatesOff_StillChecks()
+    {
+        MarkInstalled();
+        Publish("99.0.0");
+
+        var result = await Service(enabled: false).CheckNowAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateCheckOutcome.Ready, result.Outcome);
+    }
+
+    [Fact]
+    public async Task CheckNow_Offline_SaysWhy()
+    {
+        MarkInstalled();
+        _server.Routes[ReleaseFixture.Latest] = (HttpStatusCode.InternalServerError, []);
+
+        var result = await Service().CheckNowAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateCheckOutcome.Failed, result.Outcome);
+        Assert.Contains("500", result.Message);
+    }
+
+    [Fact]
+    public async Task CheckNow_Twice_DownloadsOnce()
+    {
+        MarkInstalled();
+        Publish("99.0.0");
+        var service = Service();
+
+        var results = await Task.WhenAll(service.CheckNowAsync(CancellationToken.None), service.CheckNowAsync(CancellationToken.None));
+
+        Assert.All(results, r => Assert.Equal(UpdateCheckOutcome.Ready, r.Outcome));
+        Assert.Single(_server.Requested, url => url == ReleaseFixture.SetupUrl);
+    }
+
+    [Fact]
+    public async Task Current_SaysWhatIsKnownWithoutAsking()
+    {
+        Assert.Equal(UpdateCheckOutcome.NotInstalled, Service().Current.Outcome);
+
+        MarkInstalled();
+        var service = Service();
+        Assert.Equal(UpdateCheckOutcome.Unknown, service.Current.Outcome);
+
+        Publish("99.0.0");
+        await service.CheckNowAsync(CancellationToken.None);
+        Assert.Equal(UpdateCheckOutcome.Ready, service.Current.Outcome);
+        Assert.Equal("99.0.0", service.Current.Version);
+        Assert.Single(_server.Requested, url => url == ReleaseFixture.Latest);
+    }
+
+    [Fact]
+    public async Task VersionFoundByHand_IsOfferedByTheRunningService()
+    {
+        MarkInstalled();
+        var service = Service();
+        var offered = new TaskCompletionSource<string>();
+        service.ReadyToInstall += (_, setup) => offered.TrySetResult(setup);
+
+        await service.StartAsync(CancellationToken.None);
+        await Task.Delay(300);
+        Publish("99.0.0");
+        await service.CheckNowAsync(CancellationToken.None);
+        var setup = await offered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Equal(service.WaitingSetup, setup);
+    }
+
+    [Fact]
     public async Task Probe_SaysWhatTheUpdaterDoes()
     {
         var options = Opt(new UpdatesOptions { Enabled = true });
@@ -458,6 +577,13 @@ public sealed class UpdateServiceTests : IDisposable
         await service.CheckOnceAsync(CancellationToken.None);
         var waiting = await new UpdateProbe(service, options).CheckAsync(CancellationToken.None);
         Assert.Contains("99.0.0", waiting.Detail);
+        Assert.Contains("idle", waiting.Detail);
+
+        var offService = Service(enabled: false);
+        await offService.CheckNowAsync(CancellationToken.None);
+        var waitingOff = await new UpdateProbe(offService, Opt(new UpdatesOptions { Enabled = false })).CheckAsync(CancellationToken.None);
+        Assert.Contains("99.0.0", waitingOff.Detail);
+        Assert.DoesNotContain("idle", waitingOff.Detail);
     }
 
     private sealed class Activity : ISystemActivity

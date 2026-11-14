@@ -10,6 +10,7 @@ using Microsoft.Win32;
 using ScreenSorter.Core.Configuration;
 using ScreenSorter.Core.Sorting;
 using ScreenSorter.Infrastructure.Status;
+using ScreenSorter.Infrastructure.Updates;
 // The window has a list box named HistoryFilter, which hides the type of the same name.
 using HistoryKind = ScreenSorter.Core.Sorting.HistoryFilter;
 
@@ -27,6 +28,7 @@ public partial class ActivityWindow : Window
     private const int SecondsAfterSettling = 2;
 
     private readonly StatusMonitor _monitor;
+    private readonly UpdateService _updates;
     private readonly DecisionHistory _history;
     private readonly IDecisionLog _log;
     private readonly string _reviewFolder;
@@ -41,10 +43,13 @@ public partial class ActivityWindow : Window
     /// <param name="log">Source of the accuracy page.</param>
     /// <param name="paths">Folder settings.</param>
     /// <param name="corrections">How long a moved file takes to be learned.</param>
-    public ActivityWindow(StatusMonitor monitor, DecisionHistory history, IDecisionLog log, IOptions<PathsOptions> paths, IOptions<CorrectionsOptions> corrections)
+    /// <param name="updates">Looks for and holds new versions for the update buttons.</param>
+    public ActivityWindow(StatusMonitor monitor, DecisionHistory history, IDecisionLog log, IOptions<PathsOptions> paths, IOptions<CorrectionsOptions> corrections,
+        UpdateService updates)
     {
         InitializeComponent();
         _monitor = monitor;
+        _updates = updates;
         _history = history;
         _log = log;
         _reviewFolder = paths.Value.ReviewFolder;
@@ -54,6 +59,7 @@ public partial class ActivityWindow : Window
         var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
         VersionText.Text = $"ScreenSorter {version.Split('+')[0]}";
 
+        ShowUpdate(_updates.Current);
         ShowStatus();
         _monitor.Changed += OnStatusChanged;
         Closed += (_, _) => _monitor.Changed -= OnStatusChanged;
@@ -65,6 +71,51 @@ public partial class ActivityWindow : Window
 
     /// <summary>Brings the history page to the front.</summary>
     public void ShowHistoryPage() => Tabs.SelectedItem = HistoryTab;
+
+    /// <summary>
+    /// Raised on the UI thread with the path of a verified installer when the user picks "Install and restart". The
+    /// handler closes the app and runs it.
+    /// </summary>
+    public event EventHandler<string>? InstallUpdateRequested;
+
+    /// <summary>
+    /// Brings the status page to the front and looks for a new version, as "Check for updates" does. Does nothing while
+    /// a look runs or in a copy that was not installed. Never throws: a failed look is shown on the page.
+    /// </summary>
+    /// <returns>Completes when the result is shown.</returns>
+    public async Task CheckForUpdatesAsync()
+    {
+        ShowStatusPage();
+        if (!CheckUpdatesButton.IsEnabled)
+            return;
+        CheckUpdatesButton.IsEnabled = false;
+        InstallUpdateButton.Visibility = Visibility.Collapsed;
+        UpdateText.Text = "Checking...";
+        try
+        {
+            ShowUpdate(await _updates.CheckNowAsync(CancellationToken.None));
+            await _monitor.RefreshAsync(CancellationToken.None);
+        }
+        finally
+        {
+            CheckUpdatesButton.IsEnabled = _updates.IsInstalled;
+        }
+    }
+
+    private async void OnCheckForUpdates(object sender, RoutedEventArgs e) => await CheckForUpdatesAsync();
+
+    private void ShowUpdate(UpdateCheckResult result)
+    {
+        UpdateText.Text = result.Message;
+        CheckUpdatesButton.IsEnabled = result.Outcome != UpdateCheckOutcome.NotInstalled;
+        InstallUpdateButton.Visibility = result.Outcome == UpdateCheckOutcome.Ready ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnInstallUpdate(object sender, RoutedEventArgs e)
+    {
+        if (_updates.WaitingSetup is { } setup)
+            InstallUpdateRequested?.Invoke(this, setup);
+    }
 
     private async void OnPageChanged(object sender, SelectionChangedEventArgs e)
     {
