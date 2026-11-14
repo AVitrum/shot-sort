@@ -92,6 +92,7 @@ public partial class App : Application
             _tray.GuideRequested += (_, _) => OpenGuide();
             _tray.StatusRequested += (_, _) => OpenActivity().ShowStatusPage();
             _tray.HistoryRequested += (_, _) => OpenActivity().ShowHistoryPage();
+            _tray.CheckForUpdatesRequested += async (_, _) => await OpenActivity().CheckForUpdatesAsync();
             _host.Services.GetRequiredService<UpdateService>().ReadyToInstall +=
                 (_, setup) => Dispatcher.BeginInvoke(() => InstallUpdateAsync(setup));
 
@@ -232,8 +233,10 @@ public partial class App : Application
             services.GetRequiredService<DecisionHistory>(),
             services.GetRequiredService<IDecisionLog>(),
             services.GetRequiredService<IOptions<PathsOptions>>(),
-            services.GetRequiredService<IOptions<CorrectionsOptions>>());
+            services.GetRequiredService<IOptions<CorrectionsOptions>>(),
+            services.GetRequiredService<UpdateService>());
         _activityWindow.Closed += (_, _) => _activityWindow = null;
+        _activityWindow.InstallUpdateRequested += async (_, setup) => await InstallUpdateNowAsync(setup);
         _activityWindow.Show();
         return _activityWindow;
     }
@@ -318,6 +321,19 @@ public partial class App : Application
     {
         if (_settings is null && _guide is null && _activityWindow is null && !_exiting)
             await ExitAsync(restart: false, updateSetup: setup);
+    }
+
+    // The user asked, so any moment is good, except with settings open: closing would lose their edits.
+    private async Task InstallUpdateNowAsync(string setup)
+    {
+        if (_settings is not null)
+        {
+            _settings.Activate();
+            MessageBox.Show(_settings, "Save or close Settings first, then install the update.", "ScreenSorter",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        await ExitAsync(restart: false, updateSetup: setup);
     }
 
     private async Task ExitAsync(bool restart, string? updateSetup = null)

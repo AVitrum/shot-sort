@@ -63,7 +63,7 @@ Check 'NotifyIcon window found' ((Send-TrayMouse $id 0x200) -gt 0)
 
 # Right-click opens the menu with every item.
 Check 'right-click opens the menu' (Open-Menu $id)
-foreach ($n in 'Pause', 'Sort now', 'Open review folder', 'Open screenshots folder', 'History', 'Status', 'How it works', 'Settings...', 'Exit') {
+foreach ($n in 'Pause', 'Sort now', 'Open review folder', 'Open screenshots folder', 'History', 'Status', 'Check for updates', 'How it works', 'Settings...', 'Exit') {
     Check "menu has $n" ($null -ne (Find-MenuItem $id $n))
 }
 Add-Type -AssemblyName System.Windows.Forms
@@ -88,6 +88,13 @@ Check 'History opens the window' ($null -ne $win)
 Check 'on the history page' (Wait-Until { Find-Named $win 'Screenshots' } 5)
 Pick $id 'Status'
 Check 'Status switches to the status page' (Wait-Until { Find-Named $win 'Check now' } 5)
+$win.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
+
+# A copy run from the build folder was not installed, so it says so instead of asking GitHub.
+Pick $id 'Check for updates'
+$win = Find-Window $id 'ScreenSorter activity'
+Check 'Check for updates opens the status page' ($null -ne $win)
+Check 'Check for updates explains a copy that was not installed' (Wait-Until { Find-Named $win 'This copy was not installed, so it cannot update itself.' } 5)
 $win.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close()
 
 Pick $id 'How it works'

@@ -138,9 +138,14 @@ public sealed class UpdateProbe(UpdateService updates, IOptions<UpdatesOptions> 
     /// <inheritdoc />
     public Task<ServiceCheck> CheckAsync(CancellationToken ct)
     {
-        var detail = !options.Value.Enabled ? "Automatic updates are off."
-            : !updates.IsActive ? "This copy was not installed, so it does not update itself."
-            : updates.WaitingVersion is { } waiting ? $"Version {waiting} is ready and installs when the PC is idle."
+        var enabled = options.Value.Enabled;
+        var detail = updates.WaitingVersion is { } waiting ? enabled
+                ? $"Version {waiting} is ready and installs when the PC is idle, or now with Install and restart."
+                : $"Version {waiting} is ready. Install it with Install and restart."
+            : !enabled ? updates.IsInstalled
+                ? "Automatic updates are off. Use Check for updates to look for a new version."
+                : "Automatic updates are off."
+            : !updates.IsInstalled ? "This copy was not installed, so it does not update itself."
             : "New versions install by themselves.";
         return Task.FromResult(new ServiceCheck("Updates", ServiceState.Ok, detail));
     }

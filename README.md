@@ -50,7 +50,7 @@ Right-click the tray icon for Pause/Resume, Sort now (process waiting files with
 
 Uninstalling from Windows Settings removes the app and asks whether to delete `%LOCALAPPDATA%\ScreenSorter` too. Your screenshots stay either way. A silent uninstall keeps the data. If you delete it and install again, the app treats files already sorted as placed by you.
 
-New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. The installer is not code-signed, so SmartScreen still warns on a manual download. Automatic updates have their own protection: the app installs a download only if its SHA-256 matches a checksum file signed with a key that is kept off GitHub, so controlling a release is not enough to run code on your PC.
+New versions install by themselves when the PC is idle, nothing waits to be sorted and no ScreenSorter window is open, and the app starts again afterward. To update by hand instead, untick **Install new versions automatically** under **Settings**. **Check for updates** (tray menu, or the **Status** page) looks right away, even with automatic updates off; when a new version is found, **Install and restart** installs it at once. The installer is not code-signed, so SmartScreen still warns on a manual download. Automatic updates have their own protection: the app installs a download only if its SHA-256 matches a checksum file signed with a key that is kept off GitHub, so controlling a release is not enough to run code on your PC.
 
 ### Optional helper
 

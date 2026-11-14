@@ -73,6 +73,7 @@ public sealed class TrayIcon : IDisposable
         _menu.Items.Add(new Separator());
         _menu.Items.Add(Item("History", "", () => HistoryRequested?.Invoke(this, EventArgs.Empty)));
         _menu.Items.Add(Item("Status", "", () => StatusRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(Item("Check for updates", "", () => CheckForUpdatesRequested?.Invoke(this, EventArgs.Empty)));
         _menu.Items.Add(Item("How it works", "", () => GuideRequested?.Invoke(this, EventArgs.Empty)));
         _menu.Items.Add(Item("Settings...", "", () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
         _menu.Items.Add(new Separator());
@@ -101,6 +102,9 @@ public sealed class TrayIcon : IDisposable
 
     /// <summary>Raised on the UI thread when the user picks "Status" or clicks a notification about a helper.</summary>
     public event EventHandler? StatusRequested;
+
+    /// <summary>Raised on the UI thread when the user picks "Check for updates".</summary>
+    public event EventHandler? CheckForUpdatesRequested;
 
     /// <summary>Raised on the UI thread when the user picks "Exit".</summary>
     public event EventHandler? ExitRequested;
