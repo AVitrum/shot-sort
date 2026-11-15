@@ -274,6 +274,41 @@ public sealed class CorrectionProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task CopyInAnotherFolder_WhileTrackedFileStays_IsIgnoredEveryTime()
+    {
+        var path = InFolder("Code", "Code_2024-04-05_11-58-31.png");
+        var hash = await PlacedByApp(path, "Code", null);
+        Directory.CreateDirectory(Path.Combine(_temp.Path, "Other"));
+        var copy = Path.Combine(_temp.Path, "Other", "Other_2024-04-05_11-58-31.png");
+        File.Copy(path, copy);
+
+        // Each rescan sees both files; before, each one flipped the label the other had just written.
+        for (var pass = 0; pass < 2; pass++)
+        {
+            Assert.Equal(CorrectionOutcome.Ignored, await _processor.ProcessAsync(copy, CancellationToken.None));
+            Assert.Equal(CorrectionOutcome.Ignored, await _processor.ProcessAsync(path, CancellationToken.None));
+        }
+
+        Assert.Empty(_examples.Stored);
+        Assert.True(File.Exists(copy));
+        Assert.Equal(path, (await _log.FindLatestByHashAsync(hash, CancellationToken.None))?.NewPath);
+    }
+
+    [Fact]
+    public async Task CopyInAnotherFolder_AfterTrackedFileIsGone_Learns()
+    {
+        var path = InFolder(@"Games\Hades", "Hades_2026-10-10_12-11-10.png");
+        var hash = await PlacedByApp(path, "Games", "Hades");
+        Directory.CreateDirectory(Path.Combine(_temp.Path, "Other"));
+        var copy = Path.Combine(_temp.Path, "Other", "kept copy.png");
+        File.Copy(path, copy);
+        File.Delete(path);
+
+        Assert.Equal(CorrectionOutcome.Learned, await _processor.ProcessAsync(copy, CancellationToken.None));
+        Assert.Equal("Other", _examples.Stored[hash].Category);
+    }
+
+    [Fact]
     public async Task MovedOutOfReview_Learns()
     {
         var path = InFolder("_Review");

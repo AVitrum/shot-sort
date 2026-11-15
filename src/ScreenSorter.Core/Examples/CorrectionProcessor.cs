@@ -78,6 +78,11 @@ public sealed class CorrectionProcessor(
             var record = await log.FindLatestByHashAsync(hash, ct);
             if (record is not null && SameLabel(record.Classification, category, sub))
                 return CorrectionOutcome.Ignored;
+            if (record is not null && await IsCopyOfTrackedFileAsync(path, record, ct))
+            {
+                logger.LogDebug("{Path} is a copy of {Tracked}, which is still in place; not a correction", path, record.NewPath);
+                return CorrectionOutcome.Ignored;
+            }
 
             var isReview = string.Equals(category, paths.Value.ReviewFolder, StringComparison.OrdinalIgnoreCase);
             var name = isReview ? Classification.Review(category).Name : sub ?? category;
@@ -143,6 +148,25 @@ public sealed class CorrectionProcessor(
         {
             logger.LogWarning(ex, "Could not rename {Path}", path);
             return path;
+        }
+    }
+
+    // The log tracks one path per content hash. A byte-identical copy elsewhere is not that file moved: treating it as
+    // one makes the copies relabel each other on every rescan. Once the tracked file is gone or changed, the copy is
+    // what is left of it and counts as a correction again.
+    private async Task<bool> IsCopyOfTrackedFileAsync(string path, SortRecord record, CancellationToken ct)
+    {
+        var tracked = record.NewPath;
+        if (string.Equals(tracked, path, StringComparison.OrdinalIgnoreCase) || !File.Exists(tracked))
+            return false;
+        try
+        {
+            return await files.ComputeHashAsync(tracked, ct) == record.FileHash;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable right now, but it exists: learning from the copy could restart the loop.
+            return true;
         }
     }
 
