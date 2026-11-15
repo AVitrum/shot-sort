@@ -348,7 +348,8 @@ async Task<int> VisionAccuracyAsync()
     Console.WriteLine($"Settings: MaxImageSide={config["LmStudio:MaxImageSide"]} MaxTokens={config["LmStudio:MaxTokens"]} Model={config["LmStudio:Model"]}");
 
     var rows = new List<(string Source, string Verdict)>();
-    var csv = new List<string> { "file,source,truth,predicted,verdict,ms" };
+    // confidence is the model's own figure before the threshold, so a threshold can be tuned from one run.
+    var csv = new List<string> { "file,source,truth,predicted,verdict,ms,confidence" };
     var total = Stopwatch.StartNew();
     foreach (var s in sample)
     {
@@ -371,7 +372,7 @@ async Task<int> VisionAccuracyAsync()
             : SortedPathBuilder.MatchKey(c.SubFolder ?? "") == SortedPathBuilder.MatchKey(s.Sub ?? "") ? "right"
             : "wrong-name";
         rows.Add((s.Source, verdict));
-        csv.Add($"\"{Path.GetFileName(s.File)}\",{s.Source},\"{truth}\",\"{predicted}\",{verdict},{sw.ElapsedMilliseconds}");
+        csv.Add($"\"{Path.GetFileName(s.File)}\",{s.Source},\"{truth}\",\"{predicted}\",{verdict},{sw.ElapsedMilliseconds},{(result?.Confidence ?? 0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}");
         Console.WriteLine($"{verdict,-14} {s.Source} {truth} => {predicted} (game='{result?.GameTitle}' app='{result?.AppName}') {sw.ElapsedMilliseconds} ms");
     }
     await vision.ReleaseModelAsync(CancellationToken.None);
